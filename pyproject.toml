@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools==84.2.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hellas-dataops"
+version = "0.1.0.dev0"
+description = "A modular Python foundation for reliable Greek historical weather data workflows."
+readme = "README.md"
+requires-python = ">=3.14,<3.15"
+keywords = ["data-engineering", "weather", "postgresql", "fastapi", "portfolio"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+]
+# Only dependencies used by the current configuration layer are declared here.
+# Compatibility ranges are resolved in uv.lock; keep runtime dependencies minimal.
+dependencies = [
+    "pydantic>=2.13,<3",
+    "pydantic-settings>=2.15,<3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9,<10",
+    "pytest-cov>=7,<8",
+    "ruff>=0.14,<1",
+    # Build from the locked project environment with uv build --no-build-isolation.
+    "setuptools==84.2.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["hellas_dataops*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit"]
+addopts = "--strict-config --strict-markers --import-mode=importlib"
+markers = [
+    "integration: future tests requiring an explicitly configured disposable PostgreSQL database",
+]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B"]
+
+[tool.coverage.run]
+branch = true
+source = ["hellas_dataops"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true

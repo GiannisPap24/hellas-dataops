@@ -1,0 +1,44 @@
+{
+  "_fixture": "SYNTHETIC: invented schema example; not captured Open-Meteo data.",
+  "latitude": 37.95,
+  "longitude": 23.75,
+  "generationtime_ms": 0.125,
+  "utc_offset_seconds": 0,
+  "timezone": "GMT",
+  "timezone_abbreviation": "GMT",
+  "elevation": 70.0,
+  "hourly_units": {
+    "time": "unixtime",
+    "temperature_2m": "\u00b0C",
+    "relative_humidity_2m": "%",
+    "precipitation": "mm",
+    "wind_speed_10m": "m/s"
+  },
+  "hourly": {
+    "time": [
+      1735689600,
+      1735693200,
+      1735696800
+    ],
+    "temperature_2m": [
+      null,
+      null,
+      10.2
+    ],
+    "relative_humidity_2m": [
+      null,
+      41,
+      42
+    ],
+    "precipitation": [
+      null,
+      null,
+      0
+    ],
+    "wind_speed_10m": [
+      null,
+      3,
+      4
+    ]
+  }
+}

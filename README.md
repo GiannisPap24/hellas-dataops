@@ -1,0 +1,304 @@
+# Hellas DataOps
+
+A Python data engineering portfolio project for reliable historical weather
+workflows across selected Greek cities.
+
+The intended platform will ingest Open-Meteo ERA5 data, validate and normalize it,
+store it in PostgreSQL, and expose bounded, documented queries through FastAPI.
+Its engineering focus is idempotency, backfills, provenance, failure recovery,
+deterministic testing, and measurable performance.
+
+## Current status
+
+**Milestone 2C - offline request planning and provenance.** This is an early scaffold,
+not a running weather platform.
+
+Implemented:
+
+- A `src/` Python package with explicit module boundaries.
+- Validated environment and log-level settings, loaded on demand.
+- Offline configuration unit tests with a network guard.
+- Immutable canonical weather objects and pure hourly coverage validation.
+- Deterministic synthetic domain tests, including nulls and leap-day boundaries.
+- Pure normalization of synthetic Open-Meteo JSON into canonical observations,
+  with explicit units, UTC coverage checks, and separate grid metadata.
+- Versioned city coordinates and deterministic ERA5 request specifications with
+  bounded complete-day chunks, partial-day retention boundaries, and canonical
+  JSON request provenance.
+- Architecture, data, safety, and contribution instructions.
+- A uv-managed local environment and resolved dependency lockfile.
+- Verified linting, formatting, coverage, and source/wheel packaging on Windows.
+
+Not yet implemented: HTTP execution, weather ingestion, observation filtering, CLI commands,
+database models or migrations, API endpoints, logging configuration, orchestration,
+containers, CI/CD, dashboards, or deployment. No live weather data has been fetched.
+
+## Intended data scope
+
+Start with Athens from **2025-01-01 00:00 UTC to 2025-01-08 00:00 UTC exclusive**.
+Expand to Athens, Thessaloniki, Patras, Heraklion, and Larissa for calendar year
+2025. The full target contains 43,800 hourly city records if coverage is complete.
+
+Use ERA5 explicitly and retain temperature, relative humidity, precipitation,
+and wind speed in fixed units. These are historical reanalysis estimates for
+configured coordinates, not direct city-station measurements.
+
+See [the data contract](docs/data-contract.md) for exact boundaries, units,
+missing-data rules, and provenance requirements.
+
+## Architecture
+
+One modular monolith shares domain and storage services between future CLI and
+API entry points. A source adapter will fetch data; ingestion will validate and
+persist transactional chunks; the API will query stored data without calling
+Open-Meteo on each request.
+
+| Module | Responsibility | Current state |
+| --- | --- | --- |
+| `config` | Validated settings | Implemented |
+| `domain` | Immutable weather objects and pure validation | Implemented |
+| `sources` | Request planning, response parsing, future HTTP | Pure ERA5 planning and Open-Meteo normalization; no HTTP |
+| `ingestion` | Backfills, retries, recovery, run tracking | Reserved package |
+| `storage` | PostgreSQL queries and transactions | Reserved package |
+| `api/routes` | FastAPI query endpoints | Reserved package |
+
+See [architecture decisions](docs/architecture.md). CLI and observability modules
+will be added when they contain actual behaviour.
+
+## Canonical domain
+
+`hellas_dataops.domain` exports `DatasetIdentity`, `HourlyInterval`,
+`HourlyObservation`, `validate_batch`, and `DomainValidationError`. Models use
+frozen, slotted standard-library dataclasses; domain code has no framework,
+network, configuration, or database dependency.
+
+Constructors validate identities, UTC hour alignment, finite numeric values,
+and physical bounds. `validate_batch` requires the requested city, dataset, and
+half-open interval. It accepts unsorted sequences and returns a sorted tuple
+without mutating input. Duplicates, missing hours, and unexpected hours fail the
+whole batch. All-null observations still cover their hour; null is never zero.
+
+Dataset/provider identifiers are validated syntactically, not looked up in a
+provider registry. These objects identify a series; they do not yet implement
+full ingestion provenance. See [implemented contracts and error codes](docs/data-contract.md#implemented-domain-api).
+
+## Offline source normalization
+
+`hellas_dataops.sources.open_meteo.normalize_open_meteo(payload, *, city_id,
+dataset, interval)` accepts an already decoded single-location response plus
+explicit domain request context. It returns frozen `NormalizedWeather` containing
+sorted canonical observations and `OpenMeteoMetadata`. Required arrays and units
+are checked before row construction; domain rules validate values and coverage.
+Nulls remain null. Returned grid coordinates never replace requested city points.
+
+The 146 normalization tests remain unchanged and pass as part of the current
+414-test suite. The normalizer retains 100% statement and branch coverage.
+This is evidence from synthetic
+inputs, not verification against the live service. The response cannot establish
+which historical model was selected. See [the response contract](docs/data-contract.md#implemented-open-meteo-normalization)
+and [verification results](docs/milestone-2c.md).
+
+## Offline request planning
+
+```python
+from datetime import UTC, datetime
+
+from hellas_dataops.domain import HourlyInterval
+from hellas_dataops.sources.cities import CITY_REGISTRY
+from hellas_dataops.sources.open_meteo_requests import (
+    ERA5_DATASET,
+    plan_open_meteo_requests,
+)
+
+requests = plan_open_meteo_requests(
+    CITY_REGISTRY["athens"],
+    dataset=ERA5_DATASET,
+    interval=HourlyInterval(
+        start=datetime(2025, 1, 1, 5, tzinfo=UTC),
+        end=datetime(2025, 1, 16, 3, tzinfo=UTC),
+    ),
+)
+request_url = requests[0].url  # A string only; no HTTP request.
+provenance_json = requests[0].to_json()
+```
+
+Each frozen specification preserves the original interval, a complete-day
+retrieval interval, and the retained hourly subset. The example produces two
+requests covering January 1-14 and January 15-16, retaining 358 hours overall.
+The planner accepts only the registered `gr-cities-v1` coordinates and
+`open-meteo/era5_hourly-v1` dataset. It explicitly selects units, ERA5, GMT,
+Unix seconds, land cells, native grid elevation, and JSON output.
+
+Future ingestion must normalize a complete response using `retrieval_interval`,
+then retain only `retain_interval` and validate that subset. No filtering or
+HTTP integration is implemented. See [planning contracts](docs/data-contract.md#implemented-request-planning)
+and [Milestone 2C evidence and packaging commands](docs/milestone-2c.md).
+
+## Development environment
+
+Verified on **Windows x64, CPython 3.14.4, and uv 0.13.4**. `.python-version`
+records that interpreter; no other Python version or operating system has been
+tested. No Python download or global package installation is required.
+
+Milestones 2A-2C rechecked `.tools/uv/bin/uv.exe`: it reports **0.13.4**. No uv
+executable was on this execution session's PATH. An earlier report of 0.13.3 in
+another PowerShell session cannot be confirmed here; commands below explicitly
+select the verified project-local executable and do not change other installs.
+
+Runtime dependencies remain Pydantic and pydantic-settings. The separate `dev`
+dependency group contains pytest, pytest-cov, Ruff, and the pinned setuptools
+build backend. `uv.lock` records resolved versions and package hashes. Keep the
+lockfile under version control when the repository is committed. Planned HTTP,
+database, and API dependencies are still absent.
+
+### Windows setup and installation
+
+Run from the repository root in PowerShell, using an already installed Python
+3.14.4. These settings affect only this shell session. Activation and execution
+policy changes are unnecessary. If `python --version` reports another version,
+stop and select an already approved interpreter explicitly.
+
+```powershell
+python --version
+$basePython = (Get-Command python).Source
+New-Item -ItemType Directory -Force -Path .tools/tmp | Out-Null
+$env:TEMP = Join-Path $PWD '.tools/tmp'
+$env:TMP = $env:TEMP
+$env:UV_CACHE_DIR = Join-Path $PWD '.uv-cache'
+$env:UV_PYTHON_DOWNLOADS = 'never'
+$env:UV_LINK_MODE = 'copy'
+```
+
+Bootstrap uv locally **once**, if `.tools/uv/bin/uv.exe` does not exist. The
+initial resolution selected uv 0.13.4; the repeatable bootstrap pins that version:
+
+```powershell
+& $basePython -I -B -m pip --isolated --disable-pip-version-check install --index-url https://pypi.org/simple --only-binary=:all: --no-deps --no-cache-dir --retries 0 --timeout 15 --target .tools/uv uv==0.13.4
+```
+
+Install the project and development tools into `.venv` from the existing lock:
+
+```powershell
+& ./.tools/uv/bin/uv.exe --version
+& ./.tools/uv/bin/uv.exe sync --locked --python $basePython --no-managed-python --default-index https://pypi.org/simple
+& ./.venv/Scripts/python.exe -I -B -c "import hellas_dataops; print('Installed package import OK')"
+```
+
+Stop if a command fails. `--locked` rejects stale dependency metadata rather
+than silently updating the lock. Initial setup needs PyPI access. Once the local
+cache is populated, this verification also works offline:
+
+```powershell
+& ./.tools/uv/bin/uv.exe lock --check --offline
+$lockBefore = (Get-FileHash uv.lock -Algorithm SHA256).Hash
+& ./.tools/uv/bin/uv.exe sync --locked --offline
+if ($LASTEXITCODE -ne 0) { throw 'Locked sync failed' }
+if ($lockBefore -ne (Get-FileHash uv.lock -Algorithm SHA256).Hash) { throw 'Lockfile changed' }
+```
+
+Only a deliberate dependency update should run `uv lock` without `--check`.
+The original lock was generated with `uv lock --python $basePython
+--no-managed-python --default-index https://pypi.org/simple`, then regenerated
+after pinning setuptools to its resolved version. It was not handwritten.
+
+### Offline tests and quality checks
+
+```powershell
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = "1"
+& ./.venv/Scripts/python.exe -I -B -m pytest -p no:cacheprovider -p pytest_cov --cov=hellas_dataops --cov-report=term-missing --cov-report=xml:coverage.xml
+& ./.venv/Scripts/ruff.exe check .
+& ./.venv/Scripts/ruff.exe format --check .
+```
+
+pytest uses importlib mode with **no `pythonpath` injection**. Python `-I` ignores
+PYTHONPATH and user-site packages. Plugin autoloading is disabled and pytest-cov
+is loaded explicitly; the network guard remains enabled. No database, container,
+credential, or weather API is needed. Generated coverage reports are ignored.
+
+### Build and verify distributions
+
+After locked synchronization, build offline using the backend in `.venv`:
+
+```powershell
+& ./.tools/uv/bin/uv.exe build --offline --no-build-isolation --python .venv/Scripts/python.exe --out-dir dist
+```
+
+This produces `dist/hellas_dataops-0.1.0.dev0.tar.gz` and
+`dist/hellas_dataops-0.1.0.dev0-py3-none-any.whl`; uv builds the wheel from the
+source distribution. `--no-build-isolation` here deliberately uses the locked
+backend in the already isolated project environment, not global Python packages.
+The source distribution includes documentation, tests, the lockfile, and the
+installation verification script through `MANIFEST.in`.
+
+Both distributions were installed separately into fresh local environments using
+locked runtime dependencies, then checked with `python -I`. See
+[the exact distribution verification commands and results](docs/development.md).
+These checks validate installation and imports, not byte-for-byte identical
+archives or compatibility with untested platforms.
+Milestone 1B artifacts are historical. Milestone 2C builds use a separate
+`dist/milestone-2c/` directory and verify source assets (including JSON fixtures
+and documentation), wheel modules, and fresh isolated installations. The exact
+procedure is in [the Milestone 2C record](docs/milestone-2c.md). Tests and full
+documentation belong in the source distribution; the wheel contains runtime
+code and README metadata. Rebuild before distributing any later source changes.
+
+## Configuration
+
+| Environment variable | Default | Accepted values |
+| --- | --- | --- |
+| `HELLAS_ENVIRONMENT` | `development` | `development`, `test`, `production` |
+| `HELLAS_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` |
+
+Variable names are case-insensitive; values follow the exact spelling above.
+Explicit `Settings(...)` arguments take precedence over environment variables.
+Call `load_settings()` at a future application entry point; imports do not load
+settings, and settings are not cached. The environment label does not activate
+production infrastructure, and the log level does not configure logging yet.
+
+[`.env.example`](.env.example) contains safe examples. Dotenv files are **not
+automatically loaded**. Database connection settings and provider credentials
+are deliberately absent until their respective features are implemented.
+Text validation errors hide raw inputs. Do not log raw validation error payloads
+or environment dumps; structured validation errors may still contain inputs.
+
+## Roadmap
+
+| Milestone | Scope | Status |
+| --- | --- | --- |
+| 1A | Repository foundation, configuration, contracts | Implemented in this scaffold |
+| 1B | Isolated environment, dependency lock, packaging and tooling checks | Verified on Windows / Python 3.14.4 |
+| 2A | Canonical weather objects, pure validation, synthetic tests | Implemented offline |
+| 2B | Pure Open-Meteo payload normalization with synthetic JSON; no HTTP | Implemented offline |
+| 2C | Offline request planning and explicit request/dataset provenance; no HTTP | Implemented offline |
+| 2D | HTTP client with injected mocked transport, bounded responses, and error tests | Proposed, awaiting approval; no live calls |
+| 3 | PostgreSQL schema, migrations, constraints, transactional persistence | Planned |
+| 4 | CLI ingestion, idempotency, backfills, run tracking, recovery | Planned |
+| 5 | Bounded FastAPI query endpoints and API tests | Planned |
+| 6 | Controlled end-to-end demonstration, benchmarks, runbook, portfolio evidence | Planned |
+
+Docker Compose packaging, GitHub Actions, scheduling, and a second data source
+are later decisions. Kubernetes, Spark, microservices, and a custom frontend
+are outside the current scope.
+
+## Source terms and attribution
+
+Open-Meteo's **API service usage terms** and the **weather data licence** are
+separate. Free service access is restricted to non-commercial use; the weather
+data is distributed under CC BY 4.0 with attribution requirements. A permissive
+data licence does not remove service-access restrictions. Eligibility of a
+publicly promoted live portfolio demo remains an explicit pre-publication
+decision. No live service access is required for this milestone.
+
+Before distributing actual data, include source and licence links and identify
+normalization or other modifications. See the [licensing and provenance
+contract](docs/data-contract.md#usage-terms-and-data-licence).
+
+The repository's own code licence has not yet been selected. Do not assume that
+the weather data licence licenses this code.
+
+## Engineering guidance
+
+Read [AGENTS.md](AGENTS.md) before changes. Keep secrets, personal information,
+local databases, and generated data out of the repository. Document implemented
+behaviour accurately, and provide evidence for reliability and performance
+claims.
