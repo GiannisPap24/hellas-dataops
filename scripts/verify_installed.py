@@ -31,6 +31,7 @@ def main() -> None:
         "hellas_dataops.sources.open_meteo",
         "hellas_dataops.sources.cities",
         "hellas_dataops.sources.open_meteo_requests",
+        "hellas_dataops.sources.open_meteo_client",
         "hellas_dataops.ingestion",
         "hellas_dataops.storage",
         "hellas_dataops.api",
@@ -80,6 +81,34 @@ def main() -> None:
         raise RuntimeError("Installed request planning contract failed")
     if dict(requests[0].parameters)["models"] != "era5":
         raise RuntimeError("Installed request model selection failed")
+
+    from contextlib import contextmanager
+    from io import BytesIO
+
+    from hellas_dataops.sources.open_meteo_client import fetch_open_meteo
+
+    class Response:
+        status = 200
+
+        def __init__(self):
+            self.stream = BytesIO(b'{"offline":true}')
+
+        def getheaders(self):
+            return [("Content-Type", "application/json")]
+
+        def read1(self, size):
+            return self.stream.read(size)
+
+    @contextmanager
+    def transport(request, *, timeout_seconds):
+        response = Response()
+        try:
+            yield response
+        finally:
+            response.stream.close()
+
+    if fetch_open_meteo(requests[0], transport=transport) != {"offline": True}:
+        raise RuntimeError("Installed offline HTTP client contract failed")
     print(f"Verified {distribution.metadata['Name']} {distribution.version}")
     print(f"Python {sys.version.split()[0]}; {len(modules)} isolated module imports")
 

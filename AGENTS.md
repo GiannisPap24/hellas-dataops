@@ -7,14 +7,15 @@ monolith for reliable historical weather ingestion, PostgreSQL storage, and a
 FastAPI query interface. Work exclusively in this repository. Do not inspect,
 copy, or modify other projects. Use English for code and documentation.
 
-The current authorized scope is **Milestone 2C: offline request planning and
-provenance**. Configuration, immutable domain objects, source normalization,
-versioned city coordinates, and pure request planning are implemented. HTTP
-clients, ingestion, database models, migrations, and API endpoints are future
-work. Obtain explicit approval before starting the next milestone. User
-instructions determine the active scope; update this section when it changes.
+The current authorized scope is **Milestone 2D: bounded HTTP client verified
+with injected offline transports**. Configuration, immutable domain objects,
+source normalization, versioned city coordinates, pure request planning, and
+the synchronous HTTP client are implemented. Live calls, ingestion/filtering,
+database models, migrations, and API endpoints remain outside this scope.
+Obtain explicit approval before starting the next milestone. User instructions
+determine the active scope; update this section when it changes.
 
-Milestone 2C must remain fully offline. Use the existing project-local uv and
+Milestone 2D development and verification must remain fully offline. Use the existing project-local uv and
 locked `.venv`; add no dependencies and access no external services. Keep tooling,
 caches, and temporary build environments inside this repository. Do not install or switch
 Python versions. Do not change global Python configuration, start services,

@@ -3,8 +3,87 @@
 Contract version: **0.4**. Canonical objects and domain validation were implemented
 in Milestone 2A. Milestone 2B implements pure Open-Meteo response normalization.
 Milestone 2C adds offline request planning and request intent provenance.
-HTTP execution, ingestion, response provenance, and storage remain planned.
+Milestone 2D adds bounded HTTP retrieval verified entirely with offline transports.
+Ingestion, response provenance persistence, and storage remain planned.
 All weather test inputs are explicitly synthetic.
+
+## Implemented HTTP retrieval
+
+`fetch_open_meteo(request, *, transport=None, timeout_seconds=10.0,
+max_response_bytes=2097152)` in `sources/open_meteo_client.py` accepts one
+validated `OpenMeteoRequest`. It returns a caller-owned `dict[str, object]` from
+one JSON response. It does not normalize observations, trim partial days, join
+chunks, persist provenance, read configuration, log bodies, or load a clock.
+All existing domain, planner, and normalizer semantics are unchanged.
+
+The standard-library adapter makes one GET to
+`https://archive-api.open-meteo.com/v1/archive` with the specification's exact
+query parameters. TLS certificate and hostname verification stay enabled.
+Redirects, proxies from the environment, automatic retries, credentials, cookies,
+and decompression are not supported. The adapter requests `Accept-Encoding:
+identity` and owns both response and connection cleanup, including failure paths.
+There is no service call on import or planning. No live call was made for 2D.
+
+`ArchiveTransport` is a callable returning a context manager of `ArchiveResponse`
+(`status`, `getheaders()`, `read1(size)`). A custom transport must implement
+bounded byte reads, EOF as `b''`, timeout enforcement, and cleanup; it must not
+silently retry, redirect, decompress, or buffer an unbounded body. Injection is
+a trusted programming boundary, not a sandbox for arbitrary transport code.
+
+Limits and accepted envelope:
+
+- Timeout must be a finite number greater than zero and at most 300 seconds;
+  booleans are invalid. The default 10 seconds is a per-socket-operation timeout,
+  not an end-to-end deadline. System DNS lookup can exceed that timeout.
+- The body cap must be an integer from 1 byte to 16 MiB (default 2 MiB).
+  Content-Length above the cap fails before body reads. Independently of headers,
+  reads request at most 64 KiB and consume at most cap + 1 bytes. Oversize data
+  fails before JSON decoding. Decoded object memory can exceed this byte cap.
+- Only HTTP 200 and media type `application/json` (case-insensitive, optional
+  parameters) are accepted. Body decoding is always strict UTF-8; a charset
+  parameter does not select another decoder. BOM-prefixed JSON is rejected.
+- Content-Encoding must be absent or `identity`. Content-Length, when present,
+  must be ASCII decimal and match the bytes delivered for the response.
+  Chunked and connection-close framing are supported. Duplicate framing/content
+  headers, unsupported Transfer-Encoding, and Transfer-Encoding together with
+  Content-Length are rejected. The stdlib handles HTTP framing/header parsing;
+  the body cap does not bound all header/trailer/framing overhead.
+- JSON must contain one top-level object, no trailing content, no duplicate keys
+  at any depth, no NaN/infinities (including exponent overflow), and at most 64
+  nested containers. Python's integer decoding limit also applies. An object
+  with `error: true` is treated as a provider failure; its reason is not echoed.
+- This validates a JSON envelope, not weather correctness or model delivery.
+  A valid object with missing weather fields reaches the separate normalizer.
+  Missing bytes with a valid shorter body cannot be detected without an explicit
+  framing length; weather coverage remains the normalizer's responsibility.
+
+All retrieval errors derive from `OpenMeteoClientError` and carry `code`:
+
+| Exception | Codes / fields | Meaning |
+| --- | --- | --- |
+| `OpenMeteoTimeoutError` (also a transport error) | `timeout` | Socket operation timeout |
+| `OpenMeteoTransportError` | `transport` | OS, TLS, connection, or HTTP framing failure |
+| `OpenMeteoStatusError` | `http_status`, `status`, `retry_after_seconds`, `retry_after_at` | Any non-200 response; body is not read |
+| `OpenMeteoResponseError` | `content_type`, `content_encoding`, `invalid_headers` | Unsupported or ambiguous envelope |
+| `OpenMeteoResponseError` | `response_too_large`, `content_length_mismatch`, `invalid_stream` | Oversized/truncated response or broken injected stream contract |
+| `OpenMeteoResponseError` | `invalid_json`, `invalid_json_shape`, `provider_error` | Invalid JSON or provider error envelope |
+
+Invalid API argument types/limits raise `TypeError`/`ValueError` before transport
+invocation. Network exception chains are suppressed in normal traceback rendering;
+callers must still avoid introspecting/logging raw exception context or locals.
+No raw response body, provider reason, URL, or arbitrary header is added to the
+public error message. Non-200 responses are never followed, retried, or decoded.
+
+`Retry-After` is advisory metadata only: one header of at most 128 characters,
+with at most 10 ASCII digits of delay seconds or a parseable timezone-aware HTTP
+date converted to UTC. Missing, duplicate, malformed, or oversized hints become
+`None`. Dates are not compared with the current time. A future retry policy must
+decide transient status eligibility, cap attempts/delays, and honour these hints;
+2D performs no waiting or retries.
+
+Evidence is synthetic and offline. Live endpoint compatibility, DNS/TLS behavior,
+service terms eligibility, upstream availability, throughput, and total-request
+deadlines are not established by these tests.
 
 ## Implemented domain API
 
@@ -277,7 +356,8 @@ Planning records intended ERA5 selection; neither that intent nor a response
 alone proves upstream model delivery. These are reproducible request
 specifications, not a guarantee of reproducible upstream weather values.
 Availability, response checksums, retrieval timestamps, authorization/service
-eligibility, HTTP limits, and retries belong to later milestones. No live request
+eligibility, and retries belong to later milestones. HTTP body limits are now
+implemented in the separate client. No live request
 or fresh official-documentation retrieval was performed in this milestone;
 provider options and response compatibility require verification before live use.
 
@@ -411,15 +491,17 @@ source paths such as `hourly.temperature_2m[5]` and retain the original exceptio
 as their cause. Duplicate errors retain `observations[index].timestamp_utc`, where
 the index is the original input position; coverage errors retain `observations`
 and report missing/unexpected counts with the earliest examples. Catching
-`DomainValidationError` handles all documented source and domain failures.
+`DomainValidationError` handles normalization and domain failures; HTTP client
+failures use the separate `OpenMeteoClientError` hierarchy.
 
 The synthetic schema examples follow the previously recorded official Historical
 Weather API reference. No live request or fresh documentation retrieval was
 performed in this offline milestone. Tests verify this chosen contract, not
 upstream availability, actual ERA5 selection, or compatibility with every possible
-provider response. Multi-location lists, JSON decoding (including duplicate
-object keys), HTTP error envelopes, byte/row limits, and schema drift handling
-remain future transport concerns. The normalizer accepts no implicit dataset,
+provider response. The HTTP client rejects multi-location lists and duplicate
+JSON keys, detects error envelopes, and bounds body bytes. Row counts and weather
+schema validation remain the normalizer's responsibility; automatic adaptation
+to schema drift is not implemented. The normalizer accepts no implicit dataset,
 timezone, unit, or missing-array defaults.
 
 ## Time and completeness

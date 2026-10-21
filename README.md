@@ -10,7 +10,7 @@ deterministic testing, and measurable performance.
 
 ## Current status
 
-**Milestone 2C - offline request planning and provenance.** This is an early scaffold,
+**Milestone 2D - bounded HTTP client, verified offline.** This is an early scaffold,
 not a running weather platform.
 
 Implemented:
@@ -25,11 +25,13 @@ Implemented:
 - Versioned city coordinates and deterministic ERA5 request specifications with
   bounded complete-day chunks, partial-day retention boundaries, and canonical
   JSON request provenance.
+- A synchronous standard-library HTTPS client with injected test transport,
+  bounded streamed responses, strict JSON decoding, and typed retrieval errors.
 - Architecture, data, safety, and contribution instructions.
 - A uv-managed local environment and resolved dependency lockfile.
 - Verified linting, formatting, coverage, and source/wheel packaging on Windows.
 
-Not yet implemented: HTTP execution, weather ingestion, observation filtering, CLI commands,
+Not yet implemented: weather ingestion, observation filtering, CLI commands,
 database models or migrations, API endpoints, logging configuration, orchestration,
 containers, CI/CD, dashboards, or deployment. No live weather data has been fetched.
 
@@ -57,7 +59,7 @@ Open-Meteo on each request.
 | --- | --- | --- |
 | `config` | Validated settings | Implemented |
 | `domain` | Immutable weather objects and pure validation | Implemented |
-| `sources` | Request planning, response parsing, future HTTP | Pure ERA5 planning and Open-Meteo normalization; no HTTP |
+| `sources` | Request planning, HTTP retrieval, response parsing | ERA5 planning, bounded HTTP client, pure normalization; verified offline |
 | `ingestion` | Backfills, retries, recovery, run tracking | Reserved package |
 | `storage` | PostgreSQL queries and transactions | Reserved package |
 | `api/routes` | FastAPI query endpoints | Reserved package |
@@ -91,8 +93,8 @@ sorted canonical observations and `OpenMeteoMetadata`. Required arrays and units
 are checked before row construction; domain rules validate values and coverage.
 Nulls remain null. Returned grid coordinates never replace requested city points.
 
-The 146 normalization tests remain unchanged and pass as part of the current
-414-test suite. The normalizer retains 100% statement and branch coverage.
+The 146 normalization tests remain unchanged. Milestone 2C's 414-test suite is
+retained alongside the new client tests. The normalizer retains 100% statement and branch coverage.
 This is evidence from synthetic
 inputs, not verification against the live service. The response cannot establish
 which historical model was selected. See [the response contract](docs/data-contract.md#implemented-open-meteo-normalization)
@@ -131,8 +133,36 @@ Unix seconds, land cells, native grid elevation, and JSON output.
 
 Future ingestion must normalize a complete response using `retrieval_interval`,
 then retain only `retain_interval` and validate that subset. No filtering or
-HTTP integration is implemented. See [planning contracts](docs/data-contract.md#implemented-request-planning)
+ingestion integration is implemented. The separate HTTP client below accepts
+these specifications. See [planning contracts](docs/data-contract.md#implemented-request-planning)
 and [Milestone 2C evidence and packaging commands](docs/milestone-2c.md).
+
+## HTTP client (offline verification only)
+
+`hellas_dataops.sources.open_meteo_client.fetch_open_meteo(request, *, transport=None,
+timeout_seconds=10.0, max_response_bytes=2097152)` fetches one planned chunk and
+returns a decoded JSON object. Tests supply a context-managed streaming transport;
+omitting it selects the standard-library HTTPS adapter. Calling that default
+adapter would access the live service and requires separate approval for this
+project. Imports and request planning do not open connections.
+
+The adapter uses certificate-verified HTTPS to the fixed archive endpoint,
+requests uncompressed JSON, and makes one attempt without redirects or retries.
+Non-200 statuses (including 429) raise `OpenMeteoStatusError`; safe `Retry-After`
+metadata is exposed for a future retry policy. Timeouts and transport failures
+have separate exception types. Oversized, truncated, compressed, or malformed
+responses fail without returning partial data or echoing upstream diagnostics.
+
+The default body limit is 2 MiB, configurable up to 16 MiB; reads request at most
+64 KiB and consume at most one excess byte to detect overflow. Strict UTF-8 JSON
+rejects duplicate keys, nonfinite numbers, and nesting beyond 64 containers.
+The 10-second timeout is per blocking socket operation, **not a total deadline**;
+system DNS resolution is not bounded by it. Decoded Python memory can exceed the
+body-byte limit. No live compatibility, availability, or performance claim is made.
+
+The client does not normalize, filter, persist, or schedule observations.
+See [the retrieval contract](docs/data-contract.md#implemented-http-retrieval)
+and [Milestone 2D verification](docs/milestone-2d.md).
 
 ## Development environment
 
@@ -148,8 +178,8 @@ select the verified project-local executable and do not change other installs.
 Runtime dependencies remain Pydantic and pydantic-settings. The separate `dev`
 dependency group contains pytest, pytest-cov, Ruff, and the pinned setuptools
 build backend. `uv.lock` records resolved versions and package hashes. Keep the
-lockfile under version control when the repository is committed. Planned HTTP,
-database, and API dependencies are still absent.
+lockfile under version control. The HTTP client uses the standard library;
+third-party HTTP, database, and API dependencies are still absent.
 
 ### Windows setup and installation
 
@@ -238,7 +268,9 @@ archives or compatibility with untested platforms.
 Milestone 1B artifacts are historical. Milestone 2C builds use a separate
 `dist/milestone-2c/` directory and verify source assets (including JSON fixtures
 and documentation), wheel modules, and fresh isolated installations. The exact
-procedure is in [the Milestone 2C record](docs/milestone-2c.md). Tests and full
+procedure is in [the Milestone 2C record](docs/milestone-2c.md). Milestone 2D uses
+`dist/milestone-2d/` and fresh installation checks as recorded in
+[the Milestone 2D record](docs/milestone-2d.md). Tests and full
 documentation belong in the source distribution; the wheel contains runtime
 code and README metadata. Rebuild before distributing any later source changes.
 
@@ -270,7 +302,7 @@ or environment dumps; structured validation errors may still contain inputs.
 | 2A | Canonical weather objects, pure validation, synthetic tests | Implemented offline |
 | 2B | Pure Open-Meteo payload normalization with synthetic JSON; no HTTP | Implemented offline |
 | 2C | Offline request planning and explicit request/dataset provenance; no HTTP | Implemented offline |
-| 2D | HTTP client with injected mocked transport, bounded responses, and error tests | Proposed, awaiting approval; no live calls |
+| 2D | HTTP client with injected mocked transport, bounded responses, and error tests | Implemented and verified offline; no live calls |
 | 3 | PostgreSQL schema, migrations, constraints, transactional persistence | Planned |
 | 4 | CLI ingestion, idempotency, backfills, run tracking, recovery | Planned |
 | 5 | Bounded FastAPI query endpoints and API tests | Planned |

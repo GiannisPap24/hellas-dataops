@@ -1,5 +1,8 @@
 # Milestone 1B development and distribution verification
 
+For the current HTTP client and fresh distribution checks, see
+[Milestone 2D](milestone-2d.md). Earlier records below remain historical.
+
 The Milestone 1B record below is historical. See the later sections for Milestone
 2A domain checks and Milestone 2B source normalization checks, and the separate
 [Milestone 2C record](milestone-2c.md) for planning and rebuilt distributions. The earlier

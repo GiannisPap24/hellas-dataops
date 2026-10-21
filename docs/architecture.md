@@ -4,7 +4,8 @@ Status: accepted architectural direction. Repository foundation, configuration,
 and an isolated development environment were implemented through Milestone 1B.
 Milestone 2A adds canonical weather objects and pure validation. Milestone 2B
 adds pure Open-Meteo JSON normalization. Milestone 2C adds a versioned city
-registry and deterministic request planning, without network or database integration.
+registry and deterministic request planning. Milestone 2D adds a bounded HTTP
+client verified with offline transports; no live requests or database integration.
 This document is a design contract, not a claim that the proposed pipeline is
 running.
 
@@ -29,7 +30,7 @@ remain to be verified in a later milestone.
 | Boundary | May depend on | Owns |
 | --- | --- | --- |
 | `domain` | Standard library and deliberate validation dependencies | Canonical records and pure data rules |
-| `sources` | Domain contracts, standard library; future HTTP client | City configuration, request planning, response normalization; transport deferred |
+| `sources` | Domain contracts, standard library | City configuration, request planning, bounded HTTPS retrieval, response normalization |
 | `storage` | Domain contracts, database libraries | SQL, mappings, transactions |
 | `ingestion` | Domain, source adapter, storage | Work planning and lifecycle |
 | `api` | Query services/storage, response schemas | HTTP request/response behaviour |
@@ -62,8 +63,8 @@ claimed. Unsorted input is accepted; duplicates are never silently removed.
 
 Canonical records contain city and provider-qualified dataset identity, not
 provider response fields or coordinate metadata. Source metadata is separate
-from canonical measurements. Registry lookup, persistence, HTTP transport,
-and request provenance persistence remain unimplemented.
+from canonical measurements. The source layer handles registry lookup and HTTP
+transport; persistence and request provenance persistence remain unimplemented.
 
 ## Implemented source boundary
 
@@ -89,8 +90,9 @@ coverage and duplicate messages. No partial result is returned.
 
 Source parsing is O(n) before domain sorting, which remains O(n log n); auxiliary
 memory is O(n) in received rows. These are algorithmic bounds, not benchmarks.
-No payload byte/row limit is enforced here; a future transport/planner must bound
-request sizes. The single-location, integer-Unix-seconds response contract and
+No payload byte/row limit is enforced inside the normalizer; the planner bounds
+requests to 14 days and the HTTP client bounds response bytes. Direct callers
+of the normalizer remain responsible for input size. The single-location, integer-Unix-seconds response contract and
 its compatibility assumptions are documented in `data-contract.md`.
 
 ## Implemented request planning boundary
@@ -116,7 +118,7 @@ it contains no retrieval timestamps, response hashes, or claims of model deliver
 
 Planning is O(k) time and memory for k chunks, without generating hourly records.
 No clock-dependent availability check or arbitrary total range limit is applied;
-response size limits and availability checks remain future transport concerns.
+the HTTP client now enforces response size limits. Availability remains unverified.
 Coordinate changes must be reviewed and versioned, with future persistence keys
 or dataset versions preventing cross-version overwrites.
 
@@ -126,6 +128,31 @@ successful full coverage validation, it must retain the specified hourly subset
 and validate that subset (and eventually the assembled original interval).
 Passing a partial retained interval to the normalizer with an unfiltered full
 response correctly fails. Neither filtering nor orchestration is implemented.
+
+## Implemented HTTP retrieval boundary
+
+`sources/open_meteo_client.py` consumes one `OpenMeteoRequest` and returns a
+decoded JSON object. `ArchiveTransport` and `ArchiveResponse` are the small
+streaming test boundary; injected transports own cleanup, bounded reads, and
+timeout enforcement. The default context manager opens one `HTTPSConnection`,
+verifies TLS using Python's default context, and closes response and connection
+on success or failure. It does not read proxy settings or follow redirects.
+
+Only HTTP 200 with uncompressed `application/json` is decoded. Content-Length
+is checked when present; actual streamed bytes are always bounded, including
+chunked and connection-close framing. JSON syntax, finite numbers, unique keys,
+UTF-8, a single object, and maximum nesting are enforced before returning data.
+Weather semantics remain the normalizer's responsibility. Exception messages
+omit raw bodies, headers, and underlying network errors. Parsed Retry-After
+seconds/dates are advisory; there is no retry loop, sleeping, or clock read.
+
+This standard-library implementation needs no dependency or lockfile changes.
+The configurable socket timeout is not an end-to-end deadline or DNS deadline.
+The byte cap bounds the retained body, not all HTTP header/framing overhead or
+the decoded Python object's memory. Tests exercise the real HTTP response parser
+over in-memory wire bytes as well as injected responses. Live TLS, DNS, provider
+compatibility, and service eligibility have not been exercised. Ingestion,
+retention filtering, provenance persistence, and retries remain later work.
 
 ## Intended ingestion lifecycle
 
@@ -188,11 +215,11 @@ its import path. See `development.md` for commands and validation limits.
 
 ## Validation and observability
 
-Current configuration, domain, normalization, and planning tests run offline with a socket/DNS guard and
+Current configuration, domain, normalization, planning, and HTTP client tests run offline with a socket/DNS guard and
 isolated application environment variables. Synthetic domain fixtures are in
 `tests/unit/conftest.py`; source JSON fixtures are in `tests/fixtures/open_meteo/`.
-No fixture was fetched from a provider. Future transport tests will inject HTTP
-responses, clocks, and delays. Integration tests require real, disposable
+No fixture was fetched from a provider. Transport tests inject HTTP responses;
+future retry tests will inject clocks and delays. Integration tests require real, disposable
 PostgreSQL and explicit opt-in; SQLite cannot validate PostgreSQL semantics.
 
 Future structured logs should include run/chunk IDs, city, requested interval,
