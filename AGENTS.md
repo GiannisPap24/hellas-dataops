@@ -7,15 +7,16 @@ monolith for reliable historical weather ingestion, PostgreSQL storage, and a
 FastAPI query interface. Work exclusively in this repository. Do not inspect,
 copy, or modify other projects. Use English for code and documentation.
 
-The current authorized scope is **Milestone 2D: bounded HTTP client verified
-with injected offline transports**. Configuration, immutable domain objects,
-source normalization, versioned city coordinates, pure request planning, and
-the synchronous HTTP client are implemented. Live calls, ingestion/filtering,
-database models, migrations, and API endpoints remain outside this scope.
+The current authorized scope is **Milestone 2E: offline source pipeline integration**.
+Configuration, immutable domain objects, source normalization, versioned city
+coordinates, request planning, and the synchronous HTTP client are implemented.
+The application workflow joins these components, validates full retrieval chunks,
+then retains and validates requested hours. Live calls, persistence, database
+models, migrations, and API endpoints remain outside this scope.
 Obtain explicit approval before starting the next milestone. User instructions
 determine the active scope; update this section when it changes.
 
-Milestone 2D development and verification must remain fully offline. Use the existing project-local uv and
+Milestone 2E development and verification must remain fully offline. Use the existing project-local uv and
 locked `.venv`; add no dependencies and access no external services. Keep tooling,
 caches, and temporary build environments inside this repository. Do not install or switch
 Python versions. Do not change global Python configuration, start services,
@@ -60,8 +61,12 @@ changes to semantics before changing behaviour.
   does not prove that ERA5 was requested or delivered.
 - Keep original requested hours, complete-day retrieval chunks, and retained
   hourly subsets distinct. Retrieval chunks cover at most 14 UTC calendar days.
-  Future ingestion must normalize against the full retrieval interval before
+  The source pipeline must normalize against the full retrieval interval before
   filtering and validating retained hours; do not weaken strict coverage checks.
+- Require explicit client injection at the application workflow boundary; tests
+  configure the existing HTTP client with synthetic transports. Return complete
+  validated results only, keeping request intent separate from returned metadata.
+  Preserve contextual chunk/stage failures and do not return partial success.
 - Coordinate changes require an explicit reviewed version and compatible dataset
   semantics. Do not silently replace registry points or substitute grid locations.
 - Future ingestion must support repeatable backfills, bounded retries,

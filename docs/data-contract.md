@@ -1,10 +1,12 @@
 # Historical weather data contract
 
-Contract version: **0.4**. Canonical objects and domain validation were implemented
+Contract version: **0.5** (additive pipeline interface; existing contracts unchanged).
+Canonical objects and domain validation were implemented
 in Milestone 2A. Milestone 2B implements pure Open-Meteo response normalization.
 Milestone 2C adds offline request planning and request intent provenance.
 Milestone 2D adds bounded HTTP retrieval verified entirely with offline transports.
-Ingestion, response provenance persistence, and storage remain planned.
+Milestone 2E integrates source collection, hourly retention, and final validation.
+Persistent ingestion, response provenance persistence, and storage remain planned.
 All weather test inputs are explicitly synthetic.
 
 ## Implemented HTTP retrieval
@@ -329,16 +331,16 @@ remain 24 hours across Greek daylight-saving transitions; local Greek-day
 aggregation is not implemented. Date rounding beyond datetime year 9999 fails
 explicitly, while provider data availability dates remain unverified offline.
 
-### Integration with strict normalization (future work)
+### Integration with strict normalization
 
-For each complete provider response, future ingestion must call the existing
+For each complete provider response, the implemented source pipeline calls the existing
 normalizer with `interval=request.retrieval_interval`. After full response
 validation, retain only records inside `request.retain_interval` and validate
 coverage of that subset. Validate the assembled retained rows against the
 original interval as well. Passing an unfiltered full-day response with a partial
-retained interval correctly raises a coverage error. No filtering or ingestion
-integration is implemented here; a synthetic test verifies the normalizer's
-existing strict behaviour against these two intervals.
+retained interval correctly raises a coverage error. Pipeline tests also confirm
+that missing/duplicate hours or invalid values outside the retained subset fail
+before filtering. Full-day correctness remains required for partial-day requests.
 
 ### Planning errors and limits
 
@@ -360,6 +362,80 @@ eligibility, and retries belong to later milestones. HTTP body limits are now
 implemented in the separate client. No live request
 or fresh official-documentation retrieval was performed in this milestone;
 provider options and response compatibility require verification before live use.
+
+## Implemented source pipeline
+
+Import from `hellas_dataops.ingestion.source_pipeline`:
+
+```python
+def collect_open_meteo(
+    city: CityCoordinates,
+    *,
+    dataset: DatasetIdentity,
+    interval: HourlyInterval,
+    fetch: Callable[[OpenMeteoRequest], Mapping[str, object]],
+) -> SourcePipelineResult: ...
+```
+
+`fetch` is required, with no default live-network behavior. It must return the
+complete decoded response for its supplied request. Configure the existing
+`fetch_open_meteo` using `functools.partial`, supplying its transport, timeout,
+and body limit. Tests use synthetic streaming transports; they still execute
+the real HTTP envelope/JSON validation. A custom callable is trusted code and
+is responsible for HTTP safety if it replaces the existing client.
+
+The workflow plans requests and fetches them sequentially. It normalizes each
+full `request.retrieval_interval`, filters using
+`retain.start <= timestamp_utc < retain.end`, validates that retained subset,
+and finally validates all collected rows against the original interval. Coverage
+requires exact hours, not just matching row counts. Missing hours, overlaps,
+and duplicates are errors, never silently filled or deduplicated. Values and
+units remain unchanged; null is not zero, and precipitation retains its original
+preceding-hour timestamp label. Valid output is a chronologically sorted tuple.
+
+`SourcePipelineResult` and `ChunkProvenance` are frozen, slotted output dataclasses:
+
+| Field | Contract |
+| --- | --- |
+| `SourcePipelineResult.observations` | Complete retained tuple of canonical `HourlyObservation` values |
+| `SourcePipelineResult.chunks` | Tuple of `ChunkProvenance` values in planned request order |
+| `ChunkProvenance.request` | Original immutable request, including requested/retrieval/retained intervals, coordinate version, dataset, parameters, and canonical `to_json()` |
+| `ChunkProvenance.metadata` | Validated grid coordinates, optional elevation, and UTC metadata from that response |
+
+Output constructors do not independently validate arbitrary manually constructed
+results; these guarantees apply to successful workflow returns. The request's
+retained interval identifies the observations associated with each metadata pair.
+Returned grid metadata may differ across responses and is retained per chunk,
+without overwriting requested coordinates or claiming a stable provider grid.
+Unknown provider model labels are not used as evidence. An explicit ERA5 request
+does not establish independent proof of model delivery.
+
+Invalid planning context raises the existing `DomainValidationError` before I/O.
+A noncallable `fetch` raises `TypeError`. Client configuration/programming errors
+such as invalid byte limits propagate unchanged. Expected retrieval and domain
+validation failures raise `SourcePipelineError`, preserving `code` and the original
+exception in `__cause__`, plus these fields:
+
+- `city_id`, `dataset`, `interval`: original validated request context.
+- `stage`: `retrieval`, `normalization`, `retention`, or `final_validation`.
+- `chunk_index`: 1-based planned chunk index; `None` for final assembly errors.
+- `request`: failed chunk's immutable specification; `None` for final assembly.
+
+The original cause retains specific domain field paths or HTTP status and parsed
+Retry-After hints. Messages add context without copying raw bodies or headers.
+As with the existing client, do not log exception locals or inspect hidden raw
+network exception context. No partial observations/provenance result is returned
+or attached to the error, and later chunks are not fetched after a failure.
+Completed fetches cannot be rolled back. There is no retry, persistence, or resume
+mechanism and no claim of database transaction atomicity.
+
+The pipeline reads no clock and adds no nondeterministic IDs. Equal inputs and
+response contents produce equal results. Response hashes, retrieval timestamps,
+raw payload retention, run records, and durable provenance remain future work.
+The existing socket-operation timeout does not establish a whole-request, whole-
+pipeline, or DNS deadline. Per-response byte limits do not cap total accumulated
+observations or decoded memory; callers must select sensible interval sizes.
+All evidence is offline and synthetic, not proof of live API compatibility.
 
 ## Canonical hourly values
 
@@ -549,8 +625,9 @@ refetching the same URL or possessing a checksum.
 
 The planner retains immutable request intent and canonical JSON; the normalizer
 retains canonical identity and returned location/timezone metadata separately.
-Joining these with response/retrieval provenance remains a future requirement. Preserve, without
-credentials:
+The source pipeline now pairs request intent with validated returned metadata per
+chunk. Durable storage and complete retrieval provenance remain future requirements.
+Preserve, without credentials:
 
 - Provider, endpoint, explicit model, and dataset/contract version.
 - City identifier and versioned requested coordinates.
@@ -559,8 +636,8 @@ credentials:
 - Retrieval timestamp in UTC, run/chunk/attempt identifiers, and outcome.
 - Response checksum with a defined algorithm and representation, plus a retained
   raw-response reference where replay is supported.
-- Normalization/code version when available; until a commit exists, identify the
-  implementation honestly rather than inventing a revision.
+- Normalization/code version when available; identify uncommitted changes honestly
+  rather than attributing them to an earlier checkpoint.
 - Expected, received, incomplete, inserted, updated, and unchanged counts as
   applicable.
 

@@ -6,6 +6,8 @@ Milestone 2A adds canonical weather objects and pure validation. Milestone 2B
 adds pure Open-Meteo JSON normalization. Milestone 2C adds a versioned city
 registry and deterministic request planning. Milestone 2D adds a bounded HTTP
 client verified with offline transports; no live requests or database integration.
+Milestone 2E connects planning, retrieval, normalization, retention, and validation
+in an in-memory application workflow with explicit client injection.
 This document is a design contract, not a claim that the proposed pipeline is
 running.
 
@@ -122,12 +124,13 @@ the HTTP client now enforces response size limits. Availability remains unverifi
 Coordinate changes must be reviewed and versioned, with future persistence keys
 or dataset versions preventing cross-version overwrites.
 
-For partial days, future ingestion must first pass a complete provider response
+For partial days, the source pipeline first passes a complete provider response
 to the unchanged normalizer with the request's **retrieval interval**. After
 successful full coverage validation, it must retain the specified hourly subset
 and validate that subset (and eventually the assembled original interval).
 Passing a partial retained interval to the normalizer with an unfiltered full
-response correctly fails. Neither filtering nor orchestration is implemented.
+response correctly fails. These retention steps are implemented in Milestone 2E;
+persistent ingestion and orchestration remain future work.
 
 ## Implemented HTTP retrieval boundary
 
@@ -151,8 +154,43 @@ The configurable socket timeout is not an end-to-end deadline or DNS deadline.
 The byte cap bounds the retained body, not all HTTP header/framing overhead or
 the decoded Python object's memory. Tests exercise the real HTTP response parser
 over in-memory wire bytes as well as injected responses. Live TLS, DNS, provider
-compatibility, and service eligibility have not been exercised. Ingestion,
-retention filtering, provenance persistence, and retries remain later work.
+compatibility, and service eligibility have not been exercised. Persistent
+ingestion, provenance persistence, and retries remain later work.
+
+## Implemented source pipeline
+
+`ingestion/source_pipeline.py` is the application boundary. Its
+`collect_open_meteo(city, *, dataset, interval, fetch)` function calls the existing
+planner, then sequentially invokes the supplied client for each request. No
+default client, configuration loading, network call on import, new dependency,
+concurrency, scheduler, or persistence is introduced. Tests bind the real
+`fetch_open_meteo` client to a synthetic `ArchiveTransport` using `functools.partial`.
+
+For each chunk, normalize the entire `retrieval_interval` before filtering to
+`retain_interval`. Validate the retained subset, then validate all assembled rows
+against the original interval. Existing domain checks reject missing hours,
+duplicates, overlaps, and wrong identities and return chronological tuples.
+Bad data outside the retained hours still rejects the complete provider response.
+Null values remain null and precipitation timestamp labels are never shifted.
+
+The frozen `SourcePipelineResult` contains `observations` and ordered `chunks`.
+Each frozen `ChunkProvenance` pairs an unchanged `OpenMeteoRequest` with its
+validated `OpenMeteoMetadata`. Grid metadata may vary between chunks and is
+preserved per response; it never replaces versioned requested coordinates.
+Request model selection records intent, not independent proof of ERA5 delivery.
+
+Expected client/domain failures become `SourcePipelineError` with the original
+cause, stage, 1-based chunk index/request, and original city/dataset/interval.
+Final assembly errors have no individual chunk index/request. Invalid planning
+inputs and client programming/configuration errors propagate unchanged. Processing
+stops on failure; no partial result is returned or persisted. Already completed
+fetches cannot be undone. There is no automatic retry or resumable run state.
+
+Memory grows with retained observations and chunk metadata across the requested
+interval; full provider chunks are normalized individually. The HTTP byte limit
+applies per response, not to all decoded objects or the full result. There is no
+total interval cap or whole-request/DNS deadline. Deterministic output requires
+identical inputs and response contents; repeatable upstream values are not assured.
 
 ## Intended ingestion lifecycle
 
@@ -172,7 +210,8 @@ Unchanged records remain unchanged on replay. Failed chunks must not leave
 partially committed weather records. Recovery must handle a crash after data
 commit as well as before it; completion state and data commit are atomic.
 
-These are requirements for later milestones. There are no database models,
+The in-memory collection/validation steps now exist. Persistent lifecycle and
+recovery are requirements for later milestones. There are no database models,
 transaction implementations, migrations, or runnable CLI commands yet.
 
 ## Persistence direction
@@ -204,8 +243,9 @@ instance, cache, dotenv discovery, logging setup, or I/O is performed on import.
 Database and source settings will be added with their consuming features.
 
 Current runtime dependencies are Pydantic and pydantic-settings. pytest,
-pytest-cov, and Ruff are declared development tools. FastAPI/Uvicorn, HTTPX,
-SQLAlchemy/psycopg, and Alembic are planned dependencies, not current imports.
+pytest-cov, and Ruff are declared development tools. FastAPI/Uvicorn,
+SQLAlchemy/psycopg, and Alembic are possible future dependencies, not current imports.
+HTTP retrieval uses the standard library; no third-party HTTP client is needed.
 uv manages `.venv` and the resolved `uv.lock`. Development tools are a dependency
 group, not runtime requirements or a published extra. setuptools 84.2.0 is both
 the declared build backend and a locked development dependency. Offline builds
@@ -219,8 +259,10 @@ Current configuration, domain, normalization, planning, and HTTP client tests ru
 isolated application environment variables. Synthetic domain fixtures are in
 `tests/unit/conftest.py`; source JSON fixtures are in `tests/fixtures/open_meteo/`.
 No fixture was fetched from a provider. Transport tests inject HTTP responses;
-future retry tests will inject clocks and delays. Integration tests require real, disposable
-PostgreSQL and explicit opt-in; SQLite cannot validate PostgreSQL semantics.
+future retry tests will inject clocks and delays. Offline component integration
+tests live in `tests/unit/test_source_pipeline.py` and run in the default suite.
+Future database integration tests require real, disposable PostgreSQL and explicit
+opt-in; SQLite cannot validate PostgreSQL semantics.
 
 Future structured logs should include run/chunk IDs, city, requested interval,
 attempt, outcome, row counts, and elapsed time. Do not log credentials, full
@@ -232,7 +274,7 @@ dataset size, concurrency, warm-up, request counts, and p50/p95 latency. Separat
 upstream waiting from normalization and database timings. No throughput, latency,
 uptime, or production-readiness result has been established here. Configuration
 and domain/source coverage are reported separately by milestone in `development.md`
-and say nothing about unimplemented pipeline behaviour.
+and do not establish live-provider or database behaviour.
 
 ## Deferred decisions
 

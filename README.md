@@ -10,7 +10,7 @@ deterministic testing, and measurable performance.
 
 ## Current status
 
-**Milestone 2D - bounded HTTP client, verified offline.** This is an early scaffold,
+**Milestone 2E - integrated source pipeline, verified offline.** This is an early scaffold,
 not a running weather platform.
 
 Implemented:
@@ -27,11 +27,13 @@ Implemented:
   JSON request provenance.
 - A synchronous standard-library HTTPS client with injected test transport,
   bounded streamed responses, strict JSON decoding, and typed retrieval errors.
+- An in-memory source workflow combining planning, retrieval, complete-response
+  normalization, hourly retention, final coverage validation, and chunk provenance.
 - Architecture, data, safety, and contribution instructions.
 - A uv-managed local environment and resolved dependency lockfile.
 - Verified linting, formatting, coverage, and source/wheel packaging on Windows.
 
-Not yet implemented: weather ingestion, observation filtering, CLI commands,
+Not yet implemented: persistent weather ingestion, retries/recovery, CLI commands,
 database models or migrations, API endpoints, logging configuration, orchestration,
 containers, CI/CD, dashboards, or deployment. No live weather data has been fetched.
 
@@ -60,7 +62,7 @@ Open-Meteo on each request.
 | `config` | Validated settings | Implemented |
 | `domain` | Immutable weather objects and pure validation | Implemented |
 | `sources` | Request planning, HTTP retrieval, response parsing | ERA5 planning, bounded HTTP client, pure normalization; verified offline |
-| `ingestion` | Backfills, retries, recovery, run tracking | Reserved package |
+| `ingestion` | Application workflow and future ingestion lifecycle | Source collection and retention implemented; persistence/recovery deferred |
 | `storage` | PostgreSQL queries and transactions | Reserved package |
 | `api/routes` | FastAPI query endpoints | Reserved package |
 
@@ -131,10 +133,10 @@ The planner accepts only the registered `gr-cities-v1` coordinates and
 `open-meteo/era5_hourly-v1` dataset. It explicitly selects units, ERA5, GMT,
 Unix seconds, land cells, native grid elevation, and JSON output.
 
-Future ingestion must normalize a complete response using `retrieval_interval`,
-then retain only `retain_interval` and validate that subset. No filtering or
-ingestion integration is implemented. The separate HTTP client below accepts
-these specifications. See [planning contracts](docs/data-contract.md#implemented-request-planning)
+The source pipeline normalizes each complete response using `retrieval_interval`,
+then retains only `retain_interval` and validates the subset and assembled result.
+The separate HTTP client below accepts these specifications.
+See [planning contracts](docs/data-contract.md#implemented-request-planning)
 and [Milestone 2C evidence and packaging commands](docs/milestone-2c.md).
 
 ## HTTP client (offline verification only)
@@ -163,6 +165,23 @@ body-byte limit. No live compatibility, availability, or performance claim is ma
 The client does not normalize, filter, persist, or schedule observations.
 See [the retrieval contract](docs/data-contract.md#implemented-http-retrieval)
 and [Milestone 2D verification](docs/milestone-2d.md).
+
+## Integrated source pipeline
+
+`hellas_dataops.ingestion.source_pipeline.collect_open_meteo(city, *, dataset,
+interval, fetch)` requires an explicitly supplied fetch callable. Configure the
+existing client with `functools.partial(fetch_open_meteo, transport=synthetic_transport)`
+for offline use; the workflow has no implicit live client. Its frozen result
+contains ordered observations and one request/returned-metadata pair per chunk.
+It returns only after complete coverage validation; failures stop processing
+and identify the stage and chunk without returning earlier successful rows.
+
+All 511 existing tests and 55 new component integration cases pass. Tests use
+synthetic byte streams with the real client, normalizer, planner, and validators.
+The socket/DNS guard remains enabled. Live service compatibility, persistence,
+retries, total-request deadlines, and database idempotency remain unverified or
+unimplemented. See [the pipeline contract](docs/data-contract.md#implemented-source-pipeline)
+and [Milestone 2E checks](docs/development.md#milestone-2e-offline-source-pipeline).
 
 ## Development environment
 
@@ -303,6 +322,7 @@ or environment dumps; structured validation errors may still contain inputs.
 | 2B | Pure Open-Meteo payload normalization with synthetic JSON; no HTTP | Implemented offline |
 | 2C | Offline request planning and explicit request/dataset provenance; no HTTP | Implemented offline |
 | 2D | HTTP client with injected mocked transport, bounded responses, and error tests | Implemented and verified offline; no live calls |
+| 2E | In-memory source pipeline, retained-hour filtering, complete coverage, chunk provenance | Implemented and verified offline; no persistence |
 | 3 | PostgreSQL schema, migrations, constraints, transactional persistence | Planned |
 | 4 | CLI ingestion, idempotency, backfills, run tracking, recovery | Planned |
 | 5 | Bounded FastAPI query endpoints and API tests | Planned |

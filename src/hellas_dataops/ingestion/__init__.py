@@ -1,1 +1,1 @@
-"""Reserved for ingestion and backfill coordination; not implemented."""
+"""Source pipeline coordination; persistence and backfill recovery remain future work."""

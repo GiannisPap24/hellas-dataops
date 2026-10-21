@@ -1,7 +1,8 @@
-# Milestone 1B development and distribution verification
+# Development and verification
 
-For the current HTTP client and fresh distribution checks, see
-[Milestone 2D](milestone-2d.md). Earlier records below remain historical.
+For the current integrated workflow, see [Milestone 2E](#milestone-2e-offline-source-pipeline).
+The latest distribution-install verification remains [Milestone 2D](milestone-2d.md).
+Earlier records below remain historical.
 
 The Milestone 1B record below is historical. See the later sections for Milestone
 2A domain checks and Milestone 2B source normalization checks, and the separate
@@ -312,3 +313,90 @@ request/dataset provenance. Bind ERA5, variables, units, UTC dates, and versione
 requested city coordinates; test whole-day/half-open interval conversion and
 bounded chunks. HTTP execution, retries, persistence, and API routes remain
 separate future work.
+
+## Milestone 2E: offline source pipeline
+
+Verified on 2026-10-22 (Europe/Athens), Windows x64 / CPython 3.14.4, using
+project-local uv 0.13.4 and the existing locked environment. The repository was
+clean on `main` at `2ba9ae6b4b66c48bd37ad462d15526fc92d78acd` before implementation.
+No Git metadata writes, commits, external calls, installations, services, or
+global configuration changes were performed in this milestone.
+
+`ingestion.source_pipeline.collect_open_meteo` plans requests and invokes a
+required fetch callable. Tests configure the existing standard-library client
+using `functools.partial(fetch_open_meteo, transport=synthetic_transport)`.
+Synthetic context-managed byte streams exercise real HTTP envelope/JSON parsing,
+normalization, complete-day validation, retained-hour filtering, and final domain
+validation. The existing socket/DNS guard remains active.
+
+The frozen result retains ordered observations and separate immutable request
+and returned-grid metadata per chunk. Expected client/domain errors preserve
+their original cause with stage, chunk, and requested-interval context. Nothing
+is returned until every chunk and the final assembly pass. Full details are in
+[the data contract](data-contract.md#implemented-source-pipeline).
+
+Files created:
+
+- `src/hellas_dataops/ingestion/source_pipeline.py`
+- `tests/unit/test_source_pipeline.py`
+
+Files modified: `src/hellas_dataops/ingestion/__init__.py`, `AGENTS.md`,
+`README.md`, `docs/architecture.md`, `docs/data-contract.md`, and this document.
+Existing domain/source implementations, public interfaces, tests, synthetic JSON
+fixtures, dependency specification, lockfile, and network guard are unchanged.
+
+Baseline: **511 passed**. Final suite: **566 passed, 0 failed**, including **55 new
+offline component integration cases**. They cover one-hour/seven-day/14-day/15-day
+requests, partial days, leap/year boundaries, UTC across Greek DST transitions,
+all five cities, nulls, unsorted input, repeatability, per-chunk grid metadata,
+missing/duplicate/unexpected hours, malformed weather/JSON, HTTP errors/429,
+timeouts, body limits, and failures after earlier successful chunks. Explicit
+planner fault injection verifies final rejection of gaps/duplicates/overlaps;
+normal operation uses the unchanged real planner. No existing test was weakened.
+
+| Coverage scope | Statements | Branches |
+| --- | --- | --- |
+| `ingestion/source_pipeline.py` | 46/46 (100%) | 4/4 (100%) |
+| Whole implemented package | 513/513 (100%) | 188/188 (100%) |
+
+Coverage is measured code-path execution, not proof of all inputs or live API
+compatibility. Ruff lint passes; `ruff format --check .` reports 37 files already
+formatted in this checkout. An initial B007 diagnostic was corrected by naming
+the loop index `_chunk_index`, which is consumed by the surrounding error handler;
+no lint rule was disabled. Offline lock verification and installed dependency
+compatibility checks pass for 18 packages. Lock SHA-256 remains
+`820DA87A498095A57895A38548EB46C4D07AB7ECE3B64FA9B21E0D9ED3A86390`.
+
+Commands executed from the repository root in PowerShell:
+
+```powershell
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = '1'
+& ./.venv/Scripts/python.exe -I -B -m pytest -p no:cacheprovider -q
+& ./.venv/Scripts/python.exe -I -B -m pytest -p no:cacheprovider tests/unit/test_source_pipeline.py -q
+& ./.venv/Scripts/python.exe -I -B -m pytest -p no:cacheprovider -p pytest_cov --cov=hellas_dataops --cov-report=term-missing --cov-report=json:artifacts/coverage-2e.json -q
+& ./.venv/Scripts/ruff.exe check .
+& ./.venv/Scripts/ruff.exe format --check .
+$env:UV_CACHE_DIR = Join-Path $PWD '.uv-cache'
+$env:UV_PYTHON_DOWNLOADS = 'never'
+$env:TEMP = Join-Path $PWD '.tools/tmp'
+$env:TMP = $env:TEMP
+& ./.tools/uv/bin/uv.exe --version
+& ./.tools/uv/bin/uv.exe lock --check --offline
+& ./.tools/uv/bin/uv.exe pip check --offline --python .venv/Scripts/python.exe
+```
+
+No distribution rebuild/install verification was requested or performed in 2E;
+2D artifacts do not contain this new workflow and must be rebuilt before use.
+No live-provider, database, performance, persistence, or deployment claim is made.
+Socket-operation timeouts do not establish a whole-request, whole-pipeline, or
+DNS deadline. The complete retained result accumulates in memory, with no total
+range/row cap. Response hashes, clocks, raw-response replay, retry/backoff, durable
+provenance, recovery, and grid-consistency policy remain future decisions.
+
+Recommended Milestone 3A, requiring approval: design PostgreSQL keys and schema
+for versioned requested cities/datasets, hourly observations, and per-chunk request
+and returned-grid provenance. Define constraints, null/UTC semantics, transactional
+idempotent upsert behavior, and minimal query indexes. Review driver/migration
+dependencies and a disposable local PostgreSQL test setup before installation or
+service startup. Preserve the offline default suite; database tests must be an
+explicit separate selection. HTTP ingestion scheduling and API routes stay out.
