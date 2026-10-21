@@ -8,6 +8,8 @@ registry and deterministic request planning. Milestone 2D adds a bounded HTTP
 client verified with offline transports; no live requests or database integration.
 Milestone 2E connects planning, retrieval, normalization, retention, and validation
 in an in-memory application workflow with explicit client injection.
+Milestone 3A adds five PostgreSQL Core tables and a packaged initial Alembic
+revision, tested through offline SQL generation only.
 This document is a design contract, not a claim that the proposed pipeline is
 running.
 
@@ -211,15 +213,35 @@ partially committed weather records. Recovery must handle a crash after data
 commit as well as before it; completion state and data commit are atomic.
 
 The in-memory collection/validation steps now exist. Persistent lifecycle and
-recovery are requirements for later milestones. There are no database models,
-transaction implementations, migrations, or runnable CLI commands yet.
+recovery are requirements for later milestones. Schema definitions and an offline
+migration now exist; transactions, database execution, and CLI commands do not.
 
-## Persistence direction
+## Implemented storage foundation
 
-Separate city metadata, source/dataset configuration, normalized hourly weather,
-run history, and chunk attempts conceptually. The final schema will be designed
-with migrations in Milestone 3. Do not use arbitrary JSON for the normalized
-weather query model. Bounded raw responses may be retained separately for replay
+`storage.schema` exports SQLAlchemy Core metadata and five tables: `city_configs`,
+`datasets`, `weather_hourly`, `ingestion_runs`, and `ingestion_chunks`. Canonical
+domain dataclasses remain unchanged. There are no ORM entities, engines, sessions,
+repositories, connection settings, drivers, or transactional writers.
+
+Versioned requested coordinates and provider-qualified dataset identities define
+the observation key. Weather rows reference a source chunk and must match its
+run's city/dataset through composite foreign keys. Request intent is retained as
+JSONB on the chunk; returned grid metadata has separate typed columns. Run/chunk
+status is operational state, separate from immutable-by-contract configuration.
+See [the complete relational contract](storage-schema.md) for keys, checks,
+indexes, future mapping responsibilities, and intentionally unenforced cross-row
+rules. No separate attempt/event table, raw-response table, partition, or extension
+is justified in this milestone.
+
+`storage.migration.migration_config()` locates packaged Alembic resources without
+checkout paths or credentials. Revision `20261022_0001` is an explicit frozen
+snapshot, not an import of mutable application tables. Upgrade and downgrade SQL
+compile for PostgreSQL without a driver. Online execution and configured database
+URLs are rejected before engine construction. Source archives include the root
+INI; wheels include revisions, environment entry point, and the revision template.
+
+Do not use arbitrary JSON for the normalized weather query model. Bounded raw
+responses may be retained separately for replay
 and diagnosis; retention, storage location, and size limits require a later
 decision. A checksum alone cannot reproduce a historical upstream response.
 
@@ -242,9 +264,10 @@ details. These endpoints do not exist yet.
 instance, cache, dotenv discovery, logging setup, or I/O is performed on import.
 Database and source settings will be added with their consuming features.
 
-Current runtime dependencies are Pydantic and pydantic-settings. pytest,
-pytest-cov, and Ruff are declared development tools. FastAPI/Uvicorn,
-SQLAlchemy/psycopg, and Alembic are possible future dependencies, not current imports.
+Current runtime dependencies are Pydantic, pydantic-settings, SQLAlchemy, and
+Alembic. Alembic is runtime tooling because installed distributions expose offline
+migration generation. pytest, pytest-cov, and Ruff are development tools.
+FastAPI/Uvicorn and psycopg remain future dependencies, not current imports.
 HTTP retrieval uses the standard library; no third-party HTTP client is needed.
 uv manages `.venv` and the resolved `uv.lock`. Development tools are a dependency
 group, not runtime requirements or a published extra. setuptools 84.2.0 is both
@@ -279,6 +302,6 @@ and do not establish live-provider or database behaviour.
 ## Deferred decisions
 
 - PostgreSQL version, local provisioning, and test database safeguards.
-- Exact schema, raw-payload retention, and interruption detection.
+- Transactional write policy, raw-payload retention, and interruption detection.
 - Public demo service eligibility and repository code licence.
 - Containers, CI/CD, scheduling, cloud hosting, and additional sources.

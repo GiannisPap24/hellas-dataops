@@ -15,11 +15,13 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Atmospheric Science",
 ]
-# Only dependencies used by the current configuration layer are declared here.
+# Configuration, Core schema, and packaged migration tooling dependencies.
 # Compatibility ranges are resolved in uv.lock; keep runtime dependencies minimal.
 dependencies = [
+    "alembic>=1.20,<2",
     "pydantic>=2.13,<3",
     "pydantic-settings>=2.15,<3",
+    "sqlalchemy>=2.1.5,<2.2",
 ]
 
 [dependency-groups]
@@ -34,6 +36,13 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["hellas_dataops*"]
+
+[tool.setuptools.package-data]
+"hellas_dataops.storage.migrations" = ["script.py.mako"]
+
+[[tool.uv.index]]
+url = "https://pypi.org/simple"
+default = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]
@@ -51,7 +60,8 @@ select = ["E4", "E7", "E9", "F", "I", "UP", "B"]
 
 [tool.coverage.run]
 branch = true
-source = ["hellas_dataops"]
+# Alembic loads revision modules dynamically outside the package module namespace.
+source = ["src/hellas_dataops"]
 
 [tool.coverage.report]
 show_missing = true

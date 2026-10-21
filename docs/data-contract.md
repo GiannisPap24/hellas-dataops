@@ -1,12 +1,13 @@
 # Historical weather data contract
 
-Contract version: **0.5** (additive pipeline interface; existing contracts unchanged).
+Contract version: **0.6** (additive storage contract; domain/source contracts unchanged).
 Canonical objects and domain validation were implemented
 in Milestone 2A. Milestone 2B implements pure Open-Meteo response normalization.
 Milestone 2C adds offline request planning and request intent provenance.
 Milestone 2D adds bounded HTTP retrieval verified entirely with offline transports.
 Milestone 2E integrates source collection, hourly retention, and final validation.
-Persistent ingestion, response provenance persistence, and storage remain planned.
+Milestone 3A defines the PostgreSQL schema and initial offline migration.
+Persistent ingestion and actual database operations remain planned.
 All weather test inputs are explicitly synthetic.
 
 ## Implemented HTTP retrieval
@@ -205,7 +206,7 @@ slugs use the same 1-64 character lowercase ASCII syntax as dataset identifiers.
 Construction validates values; the planner additionally requires an exact
 registered city/coordinate/version combination. A different valid point or
 unknown version is rejected. Coordinate changes require review, a new version,
-and a decision about dataset identity or storage keys before persistence; the
+and a separate versioned city configuration key in the storage schema; the
 canonical observation model has not been expanded with coordinate fields.
 
 - Development: Athens, `[2025-01-01T00:00:00Z, 2025-01-08T00:00:00Z)`;
@@ -583,7 +584,7 @@ timezone, unit, or missing-array defaults.
 ## Time and completeness
 
 - Canonical timestamp: timezone-aware UTC, rendered as ISO 8601 with `Z` at
-  public boundaries; use PostgreSQL `timestamptz` when storage is implemented.
+  public boundaries; storage columns use PostgreSQL `timestamptz`.
 - Preserve hourly precision and verify uniqueness. The implemented batch
   validator sorts unsorted input without mutating it.
 - The domain rejects duplicate timestamps, non-hourly timestamps, missing
@@ -603,7 +604,8 @@ as local Greek calendar days. Local-day aggregation is deferred.
 
 ## Identity, idempotency, and source revisions
 
-The intended natural identity is `(city_id, dataset_id, timestamp_utc)`.
+Canonical records carry `(city_id, dataset_id, timestamp_utc)`. The storage
+identity also includes the coordinate configuration version through its city key.
 Here dataset identity is the pair `(provider_id, dataset_id)` represented by
 `DatasetIdentity`; provider is part of equality, not an implied global default.
 The versioned dataset configuration identifies provider, model, variables,
@@ -642,9 +644,31 @@ Preserve, without credentials:
   applicable.
 
 Ignore volatile retrieval metadata when comparing normalized weather values.
-Raw response retention limits and the exact persistence schema are later design
-decisions. Runtime data stays outside Git; small synthetic fixtures may be
+The initial persistence schema is defined below. Raw response retention limits
+remain a later decision. Runtime data stays outside Git; small synthetic fixtures may be
 versioned under `tests/fixtures/`.
+
+## PostgreSQL schema contract (Milestone 3A)
+
+The [storage schema](storage-schema.md) defines the five tables, keys, physical
+checks, provenance columns, migration workflow, and remaining enforcement limits.
+An observation is unique by **city coordinate configuration, provider-qualified
+dataset, and UTC hourly timestamp**. A reviewed coordinate version creates a new
+series rather than overwriting the old point. Requested coordinates remain in
+`city_configs`; returned grid coordinates remain on `ingestion_chunks`.
+
+Measurements are nullable without zero defaults. Timestamp columns are
+timezone-aware; UTC alignment is checked explicitly in SQL, while rejecting
+originally naive/non-UTC inputs remains the unchanged domain validator's job.
+Source intent JSON and returned metadata stay separate, with foreign-key lineage
+from observations to the matching run and chunk. JSON storage does not prove the
+historical model delivered. The source contract version stored with the dataset
+is the planner's version, not this document's revision number.
+
+Only definitions and offline SQL generation exist. Database enforcement, actual
+migration/rollback, idempotent writes, configuration immutability, cross-row
+interval agreement, and failure recovery require disposable PostgreSQL tests in
+Milestone 3B. No canonical domain or source interface changed in this milestone.
 
 ## Usage terms and data licence
 

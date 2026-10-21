@@ -10,7 +10,7 @@ deterministic testing, and measurable performance.
 
 ## Current status
 
-**Milestone 2E - integrated source pipeline, verified offline.** This is an early scaffold,
+**Milestone 3A - PostgreSQL schema and offline migration foundation.** This is an early scaffold,
 not a running weather platform.
 
 Implemented:
@@ -29,12 +29,14 @@ Implemented:
   bounded streamed responses, strict JSON decoding, and typed retrieval errors.
 - An in-memory source workflow combining planning, retrieval, complete-response
   normalization, hourly retention, final coverage validation, and chunk provenance.
+- Five SQLAlchemy Core tables with explicit identity, lineage, UTC, and measurement
+  constraints; a frozen initial Alembic revision with offline SQL generation.
 - Architecture, data, safety, and contribution instructions.
 - A uv-managed local environment and resolved dependency lockfile.
 - Verified linting, formatting, coverage, and source/wheel packaging on Windows.
 
 Not yet implemented: persistent weather ingestion, retries/recovery, CLI commands,
-database models or migrations, API endpoints, logging configuration, orchestration,
+database execution, API endpoints, logging configuration, orchestration,
 containers, CI/CD, dashboards, or deployment. No live weather data has been fetched.
 
 ## Intended data scope
@@ -63,7 +65,7 @@ Open-Meteo on each request.
 | `domain` | Immutable weather objects and pure validation | Implemented |
 | `sources` | Request planning, HTTP retrieval, response parsing | ERA5 planning, bounded HTTP client, pure normalization; verified offline |
 | `ingestion` | Application workflow and future ingestion lifecycle | Source collection and retention implemented; persistence/recovery deferred |
-| `storage` | PostgreSQL queries and transactions | Reserved package |
+| `storage` | PostgreSQL schema and future queries/transactions | Core metadata and offline Alembic migration; database execution deferred |
 | `api/routes` | FastAPI query endpoints | Reserved package |
 
 See [architecture decisions](docs/architecture.md). CLI and observability modules
@@ -194,11 +196,11 @@ executable was on this execution session's PATH. An earlier report of 0.13.3 in
 another PowerShell session cannot be confirmed here; commands below explicitly
 select the verified project-local executable and do not change other installs.
 
-Runtime dependencies remain Pydantic and pydantic-settings. The separate `dev`
+Runtime dependencies are Pydantic, pydantic-settings, SQLAlchemy, and Alembic. The separate `dev`
 dependency group contains pytest, pytest-cov, Ruff, and the pinned setuptools
 build backend. `uv.lock` records resolved versions and package hashes. Keep the
 lockfile under version control. The HTTP client uses the standard library;
-third-party HTTP, database, and API dependencies are still absent.
+third-party HTTP clients, PostgreSQL drivers, and API frameworks are still absent.
 
 ### Windows setup and installation
 
@@ -254,7 +256,7 @@ after pinning setuptools to its resolved version. It was not handwritten.
 
 ```powershell
 $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = "1"
-& ./.venv/Scripts/python.exe -I -B -m pytest -p no:cacheprovider -p pytest_cov --cov=hellas_dataops --cov-report=term-missing --cov-report=xml:coverage.xml
+& ./.venv/Scripts/python.exe -I -B -m pytest -p no:cacheprovider -p pytest_cov --cov=src/hellas_dataops --cov-report=term-missing --cov-report=xml:coverage.xml
 & ./.venv/Scripts/ruff.exe check .
 & ./.venv/Scripts/ruff.exe format --check .
 ```
@@ -263,6 +265,8 @@ pytest uses importlib mode with **no `pythonpath` injection**. Python `-I` ignor
 PYTHONPATH and user-site packages. Plugin autoloading is disabled and pytest-cov
 is loaded explicitly; the network guard remains enabled. No database, container,
 credential, or weather API is needed. Generated coverage reports are ignored.
+Coverage uses the source directory so Alembic's dynamically loaded environment
+and revision modules are measured alongside ordinary package imports.
 
 ### Build and verify distributions
 
@@ -292,8 +296,23 @@ procedure is in [the Milestone 2C record](docs/milestone-2c.md). Milestone 2D us
 [the Milestone 2D record](docs/milestone-2d.md). Tests and full
 documentation belong in the source distribution; the wheel contains runtime
 code and README metadata. Rebuild before distributing any later source changes.
+Milestone 3A uses `dist/milestone-3a/`; its wheel also packages the Alembic
+environment, frozen revision, and revision template. See the current commands in
+[development documentation](docs/development.md#milestone-3a-schema-and-migration-foundation).
 
 ## Configuration
+
+The [storage contract](docs/storage-schema.md) documents the five tables,
+coordinate versioning, nullable measurements, lineage, and database-test limits.
+Generate PostgreSQL SQL without a server or driver:
+
+```powershell
+& ./.venv/Scripts/python.exe -I -B -m alembic -c alembic.ini upgrade head --sql
+```
+
+This emits SQL only. Online migration commands deliberately fail in Milestone 3A.
+See [development verification](docs/development.md#milestone-3a-schema-and-migration-foundation)
+for dependency versions, migration checks, and fresh distribution installations.
 
 | Environment variable | Default | Accepted values |
 | --- | --- | --- |
@@ -323,7 +342,8 @@ or environment dumps; structured validation errors may still contain inputs.
 | 2C | Offline request planning and explicit request/dataset provenance; no HTTP | Implemented offline |
 | 2D | HTTP client with injected mocked transport, bounded responses, and error tests | Implemented and verified offline; no live calls |
 | 2E | In-memory source pipeline, retained-hour filtering, complete coverage, chunk provenance | Implemented and verified offline; no persistence |
-| 3 | PostgreSQL schema, migrations, constraints, transactional persistence | Planned |
+| 3A | PostgreSQL Core schema, constraints, initial offline Alembic migration | Implemented and verified offline; no database execution |
+| 3B | Disposable PostgreSQL, migration enforcement, transactional persistence | Proposed; requires separate approval |
 | 4 | CLI ingestion, idempotency, backfills, run tracking, recovery | Planned |
 | 5 | Bounded FastAPI query endpoints and API tests | Planned |
 | 6 | Controlled end-to-end demonstration, benchmarks, runbook, portfolio evidence | Planned |

@@ -33,12 +33,19 @@ def main() -> None:
         "hellas_dataops.sources.open_meteo_requests",
         "hellas_dataops.sources.open_meteo_client",
         "hellas_dataops.ingestion",
+        "hellas_dataops.ingestion.source_pipeline",
         "hellas_dataops.storage",
+        "hellas_dataops.storage.schema",
+        "hellas_dataops.storage.migration",
+        "hellas_dataops.storage.migrations",
+        "hellas_dataops.storage.migrations.versions",
         "hellas_dataops.api",
         "hellas_dataops.api.routes",
         "pydantic",
         "pydantic_settings",
         "pydantic_core",
+        "sqlalchemy",
+        "alembic",
     )
     for name in modules:
         module = importlib.import_module(name)
@@ -109,6 +116,20 @@ def main() -> None:
 
     if fetch_open_meteo(requests[0], transport=transport) != {"offline": True}:
         raise RuntimeError("Installed offline HTTP client contract failed")
+
+    from io import StringIO
+
+    from alembic import command
+
+    from hellas_dataops.storage import metadata
+    from hellas_dataops.storage.migration import migration_config
+
+    if len(metadata.tables) != 5:
+        raise RuntimeError("Installed storage schema is incomplete")
+    sql = StringIO()
+    command.upgrade(migration_config(sql), "head", sql=True)
+    if "CREATE TABLE weather_hourly" not in sql.getvalue():
+        raise RuntimeError("Installed offline migration failed")
     print(f"Verified {distribution.metadata['Name']} {distribution.version}")
     print(f"Python {sys.version.split()[0]}; {len(modules)} isolated module imports")
 

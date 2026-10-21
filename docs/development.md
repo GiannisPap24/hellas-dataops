@@ -1,7 +1,8 @@
 # Development and verification
 
 For the current integrated workflow, see [Milestone 2E](#milestone-2e-offline-source-pipeline).
-The latest distribution-install verification remains [Milestone 2D](milestone-2d.md).
+The current schema and distribution verification is recorded in
+[Milestone 3A](#milestone-3a-schema-and-migration-foundation).
 Earlier records below remain historical.
 
 The Milestone 1B record below is historical. See the later sections for Milestone
@@ -400,3 +401,169 @@ idempotent upsert behavior, and minimal query indexes. Review driver/migration
 dependencies and a disposable local PostgreSQL test setup before installation or
 service startup. Preserve the offline default suite; database tests must be an
 explicit separate selection. HTTP ingestion scheduling and API routes stay out.
+
+## Milestone 3A: schema and migration foundation
+
+Verified on 2026-10-22 (Europe/Athens), Windows x64 / CPython **3.14.4**, using
+project-local uv **0.13.4**. The initial gate passed: `main` was clean at
+`00f23cdeacab8d610630a08e86dfee7493945240`, the committed Milestone 2E checkpoint.
+Its exact Git inventory confirms the two created files and six modified files
+listed in the 2E section above. This verification uses a real commit, not an
+invented diff from the earlier uncommitted repository. No Git metadata is written
+in 3A; this milestone remains uncommitted for owner review.
+
+The baseline **566 tests passed**. The new suite passes **610 tests, 0 failures**,
+including **44 new storage/migration cases**. Domain, planner, normalizer, HTTP
+client, source workflow, existing tests, and socket/DNS guard are unchanged.
+Tests check PostgreSQL metadata/DDL, frozen migration parity, upgrade/downgrade
+SQL emission, explicit configuration failures, and engine-free execution. They
+do not execute SQL or establish database constraint enforcement.
+
+| New storage code | Covered statements | Covered branches |
+| --- | --- | --- |
+| `storage/schema.py` | 15/15 | No branches |
+| `storage/migration.py` | 18/18 | 4/4 |
+| `storage/migrations/env.py` | 3/3 | No branches |
+| `storage/migrations/versions/20261022_0001_initial_schema.py` | 21/21 | No branches |
+| `storage/__init__.py` | 2/2 | No branches |
+| Whole application package | 572/572 | 192/192 |
+
+Coverage is 100% of measured statements/branches, not proof of all inputs or
+database behavior. The initial package-name coverage selection missed dynamically
+loaded Alembic files despite their tests running. Coverage now selects the source
+directory; no code or branches are excluded to improve the result. The initial
+revision rendering contained an unqualified `Text()` argument in JSONB metadata;
+lint and SQL generation caught it, and it was corrected to `sa.Text()`. Import
+ordering and formatting diagnostics were corrected without disabling checks.
+
+### Dependencies and Python compatibility
+
+Runtime additions resolved through the standard package index:
+
+| Package | Locked version | Role |
+| --- | --- | --- |
+| SQLAlchemy | 2.1.6 | PostgreSQL Core metadata and SQL compilation |
+| Alembic | 1.20.0 | Packaged, versioned offline migration tooling |
+| Mako | 1.4.3 | Alembic revision template dependency |
+| MarkupSafe | 3.0.4 | Mako dependency |
+
+Existing locked package versions are unchanged. Runtime and development groups
+remain separate; no ORM entities, async extra, greenlet, or database driver is
+introduced. SQLAlchemy declares Python >=3.11 and Alembic >=3.10; the actual
+resolved set is tested here only on Windows x64 / CPython 3.14.4. The declared
+project interpreter range remains >=3.14,<3.15.
+
+Compatibility review used [SQLAlchemy's published package](https://pypi.org/project/SQLAlchemy/),
+[Alembic's package](https://pypi.org/project/alembic/), and installed metadata.
+[Psycopg binary 3.3.6](https://pypi.org/project/psycopg-binary/3.3.6/) publishes a
+`cp314-cp314-win_amd64` wheel. Its [installation documentation](https://www.psycopg.org/psycopg3/docs/basic/install.html)
+distinguishes the self-contained binary extra from pure Python (requires local
+libpq) and local C builds (also require build tools). Psycopg was reviewed, not
+installed or locally tested. Select and lock a driver only with 3B approval.
+
+The authorized dependency update used these session-local settings and command:
+
+```powershell
+$env:UV_CACHE_DIR = Join-Path $PWD '.uv-cache'
+$env:UV_PYTHON_DOWNLOADS = 'never'
+$env:UV_LINK_MODE = 'copy'
+$env:TEMP = Join-Path $PWD '.tools/tmp'
+$env:TMP = $env:TEMP
+& ./.tools/uv/bin/uv.exe add 'sqlalchemy>=2.1.5,<2.2' 'alembic>=1.20,<2' --default-index https://pypi.org/simple
+```
+
+Do not repeat `uv add` for routine setup. Use the existing reviewed lock. Offline
+verification and builds use the populated cache; a cold machine needs approved
+package-index access. No global environment/configuration changes are required.
+
+### Quality and offline migration commands
+
+Run from the repository root, stopping on any command failure:
+
+```powershell
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = '1'
+& ./.venv/Scripts/python.exe -I -B -m pytest -p no:cacheprovider tests/unit/test_storage_schema.py tests/unit/test_migrations.py -q
+& ./.venv/Scripts/python.exe -I -B -m pytest -p no:cacheprovider -p pytest_cov --cov=src/hellas_dataops --cov-report=term-missing --cov-report=json:artifacts/coverage-3a.json -q
+& ./.venv/Scripts/ruff.exe check .
+& ./.venv/Scripts/ruff.exe format --check .
+$lockBefore = (Get-FileHash uv.lock -Algorithm SHA256).Hash
+& ./.tools/uv/bin/uv.exe lock --check --offline
+& ./.tools/uv/bin/uv.exe sync --locked --offline
+& ./.tools/uv/bin/uv.exe pip check --offline --python .venv/Scripts/python.exe
+if ($lockBefore -ne (Get-FileHash uv.lock -Algorithm SHA256).Hash) { throw 'Lockfile changed' }
+& ./.venv/Scripts/python.exe -I -B -m alembic -c alembic.ini upgrade head --sql
+& ./.venv/Scripts/python.exe -I -B -m alembic -c alembic.ini downgrade 20261022_0001:base --sql
+```
+
+The single base/head revision is `20261022_0001`. It contains frozen, reviewed
+operations, independent of current metadata. Initial operations were rendered
+from the in-memory schema without database autogeneration, then reviewed and
+compared in tests. Upgrade SQL includes five application tables plus Alembic's
+version table; downgrade SQL is dependency ordered. Neither command connects to
+a database. Commands without `--sql`, or a configured database URL, deliberately
+fail. See [the storage contract](storage-schema.md) for schema and mapping details.
+
+### Distribution verification procedure
+
+Ruff lint passes; formatting reports **46 files already formatted**. Offline
+lock verification, locked sync, and compatibility checks pass for **22 development
+environment packages**. Locked sync leaves the resolved lock unchanged, SHA-256
+`BE8EBABF44AFFDCBB13A08D5A091DEF58CA9BE90BC8CD2E0F94831FD1B4E8A36`.
+
+Both source distribution and wheel built successfully. Archive checks verified
+**56 source assets**, including **3 JSON fixtures and 6 documentation files**,
+and **22 wheel modules plus the Alembic template**. Both fresh isolated installs
+passed **25 imports**, offline migration generation, and dependency checks for
+**12 runtime environment packages**. Generated SQL/build/coverage outputs and
+verification environments remain ignored. No forbidden archive paths were found.
+
+The wheel packages all runtime modules, Alembic environment/revision/template,
+and README metadata. The source archive additionally contains the root INI,
+documentation, tests, three synthetic JSON fixtures, and lockfile. Archive checks
+compare required files byte-for-byte and reject environment/cache/private paths.
+Fresh installations check 25 isolated imports and installed offline migration
+generation, in addition to configuration, planning, and mocked HTTP smoke checks.
+This is not a byte-for-byte reproducible-build guarantee or PostgreSQL test.
+
+The exact procedure uses fresh local directories; choose new names for a repeat
+rather than overwriting an existing verification environment:
+
+```powershell
+function Invoke-Checked {
+    $command, $arguments = $args
+    & $command @arguments
+    if ($LASTEXITCODE -ne 0) { throw "Verification command failed: $command" }
+}
+Invoke-Checked ./.tools/uv/bin/uv.exe build --offline --no-build-isolation --python .venv/Scripts/python.exe --out-dir dist/milestone-3a
+Invoke-Checked ./.venv/Scripts/python.exe -I -B scripts/verify_distributions.py dist/milestone-3a
+Invoke-Checked ./.tools/uv/bin/uv.exe export --locked --offline --no-dev --no-emit-project --format requirements.txt --output-file .tools/runtime-requirements-3a.txt | Out-Null
+foreach ($kind in @('wheel', 'sdist')) {
+    $envPath = ".tools/$kind-check-3a"
+    if (Test-Path $envPath) { throw 'Use a fresh verification directory' }
+    Invoke-Checked ./.tools/uv/bin/uv.exe venv $envPath --python .venv/Scripts/python.exe --no-managed-python --offline
+    $checkPython = "$envPath/Scripts/python.exe"
+    Invoke-Checked $checkPython -I -B -c "import importlib.util as u; assert all(u.find_spec(n) is None for n in ['hellas_dataops','pydantic','pytest','sqlalchemy','alembic']); print('Fresh environment confirmed')"
+    Invoke-Checked ./.tools/uv/bin/uv.exe pip sync --python $checkPython --offline --require-hashes .tools/runtime-requirements-3a.txt
+    $package = if ($kind -eq 'wheel') { 'dist/milestone-3a/hellas_dataops-0.1.0.dev0-py3-none-any.whl' } else { 'dist/milestone-3a/hellas_dataops-0.1.0.dev0.tar.gz' }
+    Invoke-Checked ./.tools/uv/bin/uv.exe pip install --python $checkPython --offline --no-deps $package
+    Invoke-Checked $checkPython -I -B scripts/verify_installed.py
+    Invoke-Checked ./.tools/uv/bin/uv.exe pip check --offline --python $checkPython
+}
+```
+
+### Limits and proposed Milestone 3B
+
+No PostgreSQL server/driver, live weather calls, transactional writes, endpoints,
+services, or deployment were introduced. Online migration execution remains
+intentionally blocked. The schema defines row-level constraints, not a complete
+cross-row validation or immutable-configuration enforcement mechanism.
+
+With separate approval, 3B should choose a disposable PostgreSQL setup and driver,
+add guarded opt-in integration tests, run upgrade/downgrade/re-upgrade, and verify
+real NULL/NaN/infinity/UTC/foreign-key behavior. Add explicit domain-to-storage
+mapping and chunk transactions with idempotent writes, conflict handling, atomic
+completion, and injected failure/recovery tests. Preserve the offline default
+suite and keep HTTP retrieval outside transactions. No service may be started
+merely to run the default tests. Whole-request/DNS deadlines, upstream service
+eligibility, raw-response retention, and a repository code licence remain separate
+unresolved decisions. Do not start 3B without owner approval.

@@ -28,12 +28,13 @@ def main() -> None:
             "pyproject.toml",
             "MANIFEST.in",
             "uv.lock",
+            "alembic.ini",
             ".env.example",
             ".python-version",
         )
     }
     for directory, patterns in (
-        ("src/hellas_dataops", ("*.py",)),
+        ("src/hellas_dataops", ("*.py", "*.mako")),
         ("docs", ("*.md",)),
         ("tests", ("*.py", "*.md", "*.json")),
         ("scripts", ("*.py",)),
@@ -92,6 +93,12 @@ def main() -> None:
             name = source.relative_to(root / "src").as_posix()
             if archive.read(name) != source.read_bytes():
                 raise RuntimeError(f"Stale wheel module: {name}")
+        template = root / "src/hellas_dataops/storage/migrations/script.py.mako"
+        if (
+            archive.read(template.relative_to(root / "src").as_posix())
+            != template.read_bytes()
+        ):
+            raise RuntimeError("Missing or stale packaged Alembic template")
         if any(name.startswith(("tests/", "docs/")) for name in names):
             raise RuntimeError(
                 "Tests and documentation belong in the sdist, not runtime wheel"
@@ -108,7 +115,7 @@ def main() -> None:
         f"Verified {len(required)} source assets byte-for-byte, including {json_count} JSON fixtures and {docs_count} documentation files"
     )
     print(
-        f"Verified {len(source_files)} wheel modules byte-for-byte; README present in wheel metadata"
+        f"Verified {len(source_files)} wheel modules and Alembic template byte-for-byte; README present in wheel metadata"
     )
     print("No forbidden cache, environment, raw-data, or credential paths found")
 

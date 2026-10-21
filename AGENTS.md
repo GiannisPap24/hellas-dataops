@@ -7,17 +7,20 @@ monolith for reliable historical weather ingestion, PostgreSQL storage, and a
 FastAPI query interface. Work exclusively in this repository. Do not inspect,
 copy, or modify other projects. Use English for code and documentation.
 
-The current authorized scope is **Milestone 2E: offline source pipeline integration**.
+The current authorized scope is **Milestone 3A: PostgreSQL schema and migration foundation**.
 Configuration, immutable domain objects, source normalization, versioned city
 coordinates, request planning, and the synchronous HTTP client are implemented.
 The application workflow joins these components, validates full retrieval chunks,
-then retains and validates requested hours. Live calls, persistence, database
-models, migrations, and API endpoints remain outside this scope.
+then retains and validates requested hours. SQLAlchemy Core tables and an initial
+offline Alembic migration define the storage contract. Database execution,
+transactional persistence, live weather calls, and API endpoints remain outside scope.
 Obtain explicit approval before starting the next milestone. User instructions
 determine the active scope; update this section when it changes.
 
-Milestone 2E development and verification must remain fully offline. Use the existing project-local uv and
-locked `.venv`; add no dependencies and access no external services. Keep tooling,
+Milestone 3A tests and migration generation remain offline. The owner authorized
+project-local SQLAlchemy/Alembic installation from the standard index and package
+compatibility review; no PostgreSQL driver is needed yet. Use project-local uv and
+the locked `.venv`. Keep tooling,
 caches, and temporary build environments inside this repository. Do not install or switch
 Python versions. Do not change global Python configuration, start services,
 pull container images, create remote repositories, commit, push, publish, or
@@ -75,6 +78,14 @@ changes to semantics before changing behaviour.
   as well as application validation when persistence is introduced.
 - Use reviewed migrations for future schema changes. Do not silently recreate
   databases or substitute SQLite for PostgreSQL integration tests.
+- Define storage using SQLAlchemy Core, without replacing domain dataclasses with
+  ORM models. Freeze migration operations independently of current metadata.
+- Keep migration generation connection-free. Online migration execution is
+  explicitly disabled until separately approved database integration work.
+- Treat coordinate and dataset configurations as immutable identities; future
+  writers must reject conflicting redefinitions and preserve chunk lineage.
+- Offline SQL compilation and metadata tests do not prove database enforcement,
+  rollback, concurrency, or transactional correctness.
 
 ## Testing and quality
 

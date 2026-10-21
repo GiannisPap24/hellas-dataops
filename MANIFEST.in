@@ -2,6 +2,8 @@ include AGENTS.md
 include .env.example
 include .python-version
 include uv.lock
+include alembic.ini
+recursive-include src/hellas_dataops/storage/migrations *.mako
 recursive-include docs *.md
 recursive-include tests *.py *.md *.json
 recursive-include scripts *.py
