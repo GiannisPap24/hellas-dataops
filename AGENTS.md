@@ -7,9 +7,15 @@ monolith for reliable historical weather ingestion, PostgreSQL storage, and a
 FastAPI query interface. Work exclusively in this repository. Do not inspect,
 copy, or modify other projects. Use English for code and documentation.
 
-Milestone 3B.2 is **ACCEPTED** after 83 host PostgreSQL tests and 750 offline tests.
-Current authorized scope is final acceptance documentation and one reviewed local
-Git checkpoint only. Do not push or begin the next milestone without approval.
+Milestone 3C.1 is **ACCEPTED** after 109 host PostgreSQL tests and 837 offline tests.
+Current authorized scope is acceptance documentation and preparation of an
+owner-run, reviewed local Git checkpoint script. Do not write Git metadata from
+the sandbox, push, perform live weather requests, or begin another milestone.
+Keep source retrieval outside database transactions. Operational commands must
+remain synthetic-only and use the verified disposable target. Preserve the
+initial migration and existing domain/source interfaces. Run receipts and weather
+must commit together; ambiguous outcomes require durable reconciliation, never
+an assumption that an exception proves rollback. See docs/ingestion.md.
 Configuration, immutable domain objects, source normalization, versioned city
 coordinates, request planning, and the synchronous HTTP client are implemented.
 The application workflow joins these components, validates full retrieval chunks,

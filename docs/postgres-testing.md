@@ -47,13 +47,15 @@ PostgreSQL 18.6 with 54 passing tests. Alembic uses the existing
 SQLAlchemy connection and needs no driver-specific migration changes.
 
 Use Windows x64 / CPython 3.14.4 with the existing local uv 0.13.4 and locked
-environment. The script verifies the main branch and accepted 3B.1 checkpoint
-`779313504a658ea5e7768c5e98f420944d47e4ea`. Only reviewed 3B.2 file paths may be
-modified/untracked; unexpected paths stop execution. The baseline check must be
-reviewed after a future owner-created checkpoint rather than silently bypassed.
-The frozen runner intentionally refuses a different HEAD after the 3B.1 commit;
-review that gate before the next authorized database run. The accepted host run
-does not need to be repeated merely to create the checkpoint.
+environment. The script verifies main at the accepted 3B.2 checkpoint
+`34a9c087adfa28c783dc8e319c6ca6c278b2e49e`. Only reviewed 3C.1 paths may be
+modified/untracked; unexpected paths stop execution. The current suite collects
+109 cases: 83 accepted database tests plus 26 new operational ingestion cases.
+All 109 cases passed in 33.10 seconds on the owner host. The exact evidence is
+`artifacts/postgres/hellas-dataops-test-4a43cbabd8ba/report.json`;
+see [final acceptance](development.md#milestone-3c1-final-acceptance).
+Coverage now includes storage and the coordinator. The baseline must be reviewed
+after any future checkpoint; never bypass the guard.
 
 ## Infrastructure and preflight
 
@@ -191,8 +193,10 @@ and repeat verification.
 Milestone 3B.2 verifies mappings, transactional chunk writes, correction/lineage,
 atomic chunk completion, tested concurrent writers and injected rollback/retry.
 Process crashes, lost commit acknowledgements and automatic operational recovery
-remain unverified. The next recommended milestone is a small sequential ingestion
-command with explicit run identity/status and resume semantics, initially using
-synthetic transport and the disposable database. It requires separate approval.
+remain unverified. Milestone 3C.1 now implements a small sequential ingestion
+command with explicit run identity/status and resume, using synthetic transport
+and the disposable database. Its 26 new cases passed against PostgreSQL, including
+simulated acknowledgement loss and explicit resume. Actual process crashes and
+network-partition recovery remain untested.
 Live weather access, FastAPI endpoints, scheduling and deployment are not part of
 this acceptance review.

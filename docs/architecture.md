@@ -20,13 +20,15 @@ not arbitrary crash recovery or an operational ingestion command.
 The storage service owns transactions; source retrieval stays outside them.
 See [persistence contracts](persistence.md) for locking, replay, correction and
 provenance decisions. Automated recovery remains unimplemented.
+Milestone 3C.1 implements explicit synthetic start/status/resume operations; its
+837 offline tests and 109 real PostgreSQL tests pass. Milestone 3C.1 is accepted.
 This document is a design contract, not a claim that the proposed pipeline is
 running.
 
 ## Decisions
 
 Use a Python modular monolith with PostgreSQL persistence and a FastAPI query
-interface. Operate ingestion through a future CLI. Begin with sequential,
+interface. Operate synthetic ingestion through the implemented Python CLI. Begin with sequential,
 synchronous work and bounded batches; introduce concurrency only for a measured
 need. There are no workers, queues, schedulers, or external infrastructure in the
 current implementation.
@@ -36,8 +38,8 @@ The current locked development dependencies and distributions have been tested
 on Windows x64 with Python 3.14.4. Other platforms, Python releases, and future
 HTTP/database dependencies remain untested. Broaden or change the supported
 interpreter range only after verification.
-PostgreSQL is approved; its concrete server version and provisioning method
-remain to be verified in a later milestone.
+PostgreSQL 18.6 with the guarded official-image host workflow is verified through
+3C.1, including the new sequential lifecycle and explicit resume cases.
 
 ## Module dependencies
 
@@ -78,7 +80,7 @@ claimed. Unsorted input is accepted; duplicates are never silently removed.
 Canonical records contain city and provider-qualified dataset identity, not
 provider response fields or coordinate metadata. Source metadata is separate
 from canonical measurements. The source layer handles registry lookup and HTTP
-transport; persistence and request provenance persistence remain unimplemented.
+transport; storage now persists request provenance and canonical observations.
 
 ## Implemented source boundary
 
@@ -142,7 +144,7 @@ successful full coverage validation, it must retain the specified hourly subset
 and validate that subset (and eventually the assembled original interval).
 Passing a partial retained interval to the normalizer with an unfiltered full
 response correctly fails. These retention steps are implemented in Milestone 2E;
-persistent ingestion and orchestration remain future work.
+the new sequential coordinator now persists these retained chunks; automated orchestration remains future work.
 
 ## Implemented HTTP retrieval boundary
 
@@ -222,16 +224,17 @@ Unchanged records remain unchanged on replay. Failed chunks must not leave
 partially committed weather records. Recovery must handle a crash after data
 commit as well as before it; completion state and data commit are atomic.
 
-The in-memory collection/validation steps now exist. Persistent lifecycle and
-recovery are requirements for later milestones. Schema definitions and an offline
-migration now exist; transactions, database execution, and CLI commands do not.
+The in-memory source workflow remains unchanged. Milestone 3C.1 adds a separate
+sequential coordinator and synthetic-only CLI with explicit durable resume. See
+[operational ingestion](ingestion.md); its 26 new real database tests pass. Automatic
+retries and background recovery remain future work.
 
 ## Implemented storage foundation
 
 `storage.schema` exports SQLAlchemy Core metadata and five tables: `city_configs`,
 `datasets`, `weather_hourly`, `ingestion_runs`, and `ingestion_chunks`. Canonical
-domain dataclasses remain unchanged. There are no ORM entities, application sessions,
-repositories or transactional writers. The separate `storage.test_database` module
+domain dataclasses remain unchanged. There are no ORM entities or generic repositories. The accepted Core writer
+owns atomic chunk transactions, and the operational session adds run ownership. The separate `storage.test_database` module
 provides explicit test-only configuration and guarded connections using pg8000.
 
 Versioned requested coordinates and provider-qualified dataset identities define
@@ -299,7 +302,7 @@ isolated application environment variables. Synthetic domain fixtures are in
 No fixture was fetched from a provider. Transport tests inject HTTP responses;
 future retry tests will inject clocks and delays. Offline component integration
 tests live in `tests/unit/test_source_pipeline.py` and run in the default suite.
-Future database integration tests require real, disposable PostgreSQL and explicit
+Database integration tests require real, disposable PostgreSQL and explicit
 opt-in; SQLite cannot validate PostgreSQL semantics.
 
 Future structured logs should include run/chunk IDs, city, requested interval,
@@ -316,7 +319,25 @@ and do not establish live-provider or database behaviour.
 
 ## Deferred decisions
 
-- Successful host verification of PostgreSQL 18.6 and native driver loading.
-- Transactional write policy, raw-payload retention, and interruption detection.
+- A small read-only API over stored synthetic observations, with bounded queries.
+- Raw-payload retention, automatic interruption detection and retry policy.
 - Public demo service eligibility and repository code licence.
-- Containers, CI/CD, scheduling, cloud hosting, and additional sources.
+- CI/CD, scheduling, cloud hosting, and additional sources; disposable test containers already exist.
+
+## Milestone 3C.1 operational boundary
+
+`ingestion.coordinator` plans and processes one chunk at a time. It reuses the
+normalizer and `ChunkWrite` validation, and calls the existing storage writer
+inside a transaction owned by `storage.run_tracking.RunSession`. Registration,
+status reads, failure recording and deliberate resume are separate short
+transactions. A session advisory lock owns one run across these transactions;
+there is no open transaction during retrieval. Failed connections cannot silently
+reconnect under an expired ownership lock. Different runs retain the existing
+city/version write serialization.
+
+The source pipeline, canonical models, schema and frozen initial migration are
+unchanged. Shared private persistence helpers now accept a run plan without
+requiring weather retrieval, and success updates preserve lifecycle provenance.
+No general repository framework, new dependency, scheduler or concurrent worker
+is introduced. The synthetic-only CLI is `python -m hellas_dataops.ingestion`.
+See [status, resume and limits](ingestion.md) for the exact contract.

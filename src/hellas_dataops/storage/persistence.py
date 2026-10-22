@@ -11,6 +11,7 @@ from hellas_dataops.storage.mapping import (
     MEASUREMENTS,
     ChunkWrite,
     PersistenceError,
+    RunPlan,
     WritePolicy,
     measurement_values,
     metadata_values,
@@ -66,7 +67,12 @@ def _identity(
 def _prepare_run(
     connection: Connection, chunk: ChunkWrite, city_key: int, dataset_key: int
 ):
-    run = chunk.run
+    return _prepare_plan(connection, chunk.run, city_key, dataset_key)
+
+
+def _prepare_plan(
+    connection: Connection, run: RunPlan, city_key: int, dataset_key: int
+):
     values = dict(
         run_id=run.run_id,
         city_config_id=city_key,
@@ -131,8 +137,7 @@ def _prepare_run(
     return existing, stored
 
 
-def _write(connection: Connection, chunk: ChunkWrite) -> WriteResult:
-    run = chunk.run
+def _identities(connection: Connection, run: RunPlan) -> tuple[int, int]:
     # Lock order: city configuration, then run, then chronological weather rows.
     # This also serializes overlapping intervals with no preexisting weather rows.
     city = _identity(
@@ -149,7 +154,7 @@ def _write(connection: Connection, chunk: ChunkWrite) -> WriteResult:
             provider_id=run.dataset.provider_id,
             dataset_id=run.dataset.dataset_id,
             historical_model="era5",
-            source_contract_version=chunk.request.contract_version,
+            source_contract_version=run.requests[0].contract_version,
             temperature_unit="celsius",
             humidity_unit="percent",
             precipitation_unit="mm",
@@ -157,7 +162,12 @@ def _write(connection: Connection, chunk: ChunkWrite) -> WriteResult:
         ),
         ("provider_id", "dataset_id"),
     )
-    city_key, dataset_key = city["city_config_id"], dataset["dataset_key"]
+    return city["city_config_id"], dataset["dataset_key"]
+
+
+def _write(connection: Connection, chunk: ChunkWrite) -> WriteResult:
+    run = chunk.run
+    city_key, dataset_key = _identities(connection, run)
     stored_run, chunks = _prepare_run(connection, chunk, city_key, dataset_key)
     stored_chunk = chunks[chunk.chunk_index - 1]
     if stored_chunk["status"] == "succeeded":
@@ -243,7 +253,9 @@ def _write(connection: Connection, chunk: ChunkWrite) -> WriteResult:
         unchanged=unchanged,
         corrections=corrections,
     )
-    provenance = request_values(chunk.request, run.policy) | {"receipt": receipt}
+    # Retain lifecycle history added by the operational coordinator. The request
+    # and policy were checked against the immutable plan by _prepare_run.
+    provenance = dict(stored_chunk["request_provenance"]) | {"receipt": receipt}
     connection.execute(
         ingestion_chunks.update()
         .where(

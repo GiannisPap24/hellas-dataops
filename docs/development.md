@@ -1230,3 +1230,300 @@ and tests. Basic structured run diagnostics and failure handling are MVP needs.
 Scheduling, dashboards, cloud deployment, additional sources, distributed workers
 and high-volume performance tuning remain optional enhancements. No next-milestone
 implementation is authorized by this acceptance record.
+
+## Milestone 3C.1: sequential synthetic ingestion and explicit resume
+
+Implementation is complete for host verification, **not yet accepted**. Baseline
+verified clean on main at `34a9c087adfa28c783dc8e319c6ca6c278b2e49e` before edits.
+The existing 3B.2 report records 83 real PostgreSQL tests, exit zero, and server
+18.6. Those results do not validate new lifecycle code. No Docker or live weather
+operation was attempted in the sandbox, and no Git metadata was written.
+
+See [ingestion.md](ingestion.md) for start/status/resume commands, status semantics,
+transaction boundaries, correction policy, safe failure history and limitations.
+No schema migration or dependency change is needed. The accepted domain, source
+pipeline, mapping contract, initial revision, database target safeguards and
+existing test files are unchanged. The Core writer shares internal identity/plan
+helpers with lifecycle registration and preserves additive operational provenance.
+
+### Verification performed
+
+- **837 offline tests passed, zero failures**: 750 existing plus 87 new cases.
+  Network/DNS blocking remains enabled. This run took 2.86 seconds; no performance
+  claim is inferred from unit-test time.
+- Ruff lint and formatting pass (68 Python files).
+- Full-package combined statement/branch coverage: **90.75%** (1,050/1,142
+  statements, 313/360 branches).
+- Coordinator: **63/63 statements, 12/12 branches (100%)**.
+- Run tracking: **132/178 statements, 36/62 branches (70% combined)**. SQL-backed
+  state transitions, durable coverage queries and database failure paths require
+  the pending host run. Offline mocks are not evidence of SQL correctness.
+- Synthetic adapter: 19/19 statements; CLI: 39/40 statements and 7/8 branches.
+  The CLI module launcher is separately checked with `python -m ... --help`.
+- **109 PostgreSQL tests collected only**: 83 existing plus 26 new lifecycle cases.
+  No new database test has been executed in Codex. The host command below must
+  pass before acceptance. Its targeted coverage includes storage and coordinator.
+- Offline lock verification and compatibility of all 28 installed development
+  packages pass. `pyproject.toml` and `uv.lock` are unchanged.
+
+Toolchain remains Python 3.14.4, uv 0.13.4, pg8000 1.31.5, SQLAlchemy 2.1.6,
+Alembic 1.20.0, pytest 9.1.1, pytest-cov 7.1.0, Ruff 0.17.1, setuptools 84.2.0.
+PostgreSQL 18.6 is the previously verified and host-pinned version, not a new
+server measurement in this milestone.
+
+Commands from repository root (PowerShell, no activation or PYTHONPATH):
+
+```powershell
+$env:TEMP = Join-Path $PWD '.tools/tmp'
+$env:TMP = $env:TEMP
+$env:UV_CACHE_DIR = Join-Path $PWD '.uv-cache'
+$env:UV_PYTHON_DOWNLOADS = 'never'
+$env:UV_LINK_MODE = 'copy'
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = '1'
+& .\.venv\Scripts\python.exe -I -B -m pytest -p no:cacheprovider -p pytest_cov --cov=src/hellas_dataops --cov-report=term --cov-report=json:artifacts/coverage-3c1-offline.json -q
+& .\.venv\Scripts\ruff.exe check .
+& .\.venv\Scripts\ruff.exe format --check .
+& .\.tools\uv\bin\uv.exe lock --check --offline
+& .\.tools\uv\bin\uv.exe pip check --offline --python .venv/Scripts/python.exe
+& .\.venv\Scripts\python.exe -I -B -m pytest tests/integration --postgres-config .tools/not-executed.json --collect-only -p no:cacheprovider -q
+& .\.venv\Scripts\python.exe -I -B -m hellas_dataops.ingestion --help
+& .\.tools\uv\bin\uv.exe build --offline --no-build-isolation --python .venv/Scripts/python.exe --out-dir dist/milestone-3c1
+& .\.venv\Scripts\python.exe -I -B scripts/verify_distributions.py dist/milestone-3c1
+```
+
+Check `$LASTEXITCODE` after each command and stop on failure. Source distribution
+verification compares every required source/test/document/script asset against
+the working tree and checks wheel runtime content. Fixtures remain source-archive
+assets; synthetic runtime execution does not depend on a checkout fixture path.
+Fresh wheel/sdist environments use `.tools/verify-3c1-wheel` and
+`.tools/verify-3c1-sdist`, the same established installation procedure above,
+with `uv export --locked --offline --no-dev --no-emit-project --format
+requirements.txt --output-file .tools/runtime-requirements-3c1.txt`, hashed
+`uv pip sync`, offline `uv pip install --no-deps`, and `verify_installed.py`.
+Both fresh installations passed 38 isolated imports and compatibility checks
+for all 18 runtime packages including the project. Wheel and source builds
+passed; archive verification matched 80 required source assets (3 JSON fixtures,
+9 documentation files) and 29 wheel modules plus the Alembic template. No
+forbidden generated/credential paths were included. The PowerShell wrapper parsed
+successfully, and the host runner's real read-only repository gate accepted the
+current baseline and exact 19-path inventory. The actual database phase remains
+pending; the runner itself was not started in the sandbox.
+
+### Exact implementation inventory
+
+Created (8):
+
+- `docs/ingestion.md`
+- `src/hellas_dataops/ingestion/__main__.py`
+- `src/hellas_dataops/ingestion/coordinator.py`
+- `src/hellas_dataops/sources/synthetic.py`
+- `src/hellas_dataops/storage/run_tracking.py`
+- `tests/integration/test_operational_ingestion.py`
+- `tests/unit/test_coordinator.py`
+- `tests/unit/test_run_tracking.py`
+
+Modified (11):
+
+- `AGENTS.md`
+- `README.md`
+- `docs/architecture.md`
+- `docs/data-contract.md`
+- `docs/development.md`
+- `docs/persistence.md`
+- `docs/postgres-testing.md`
+- `docs/storage-schema.md`
+- `scripts/verify_installed.py`
+- `scripts/verify_postgres.py`
+- `src/hellas_dataops/storage/persistence.py`
+
+Generated coverage, distributions and isolated environments are ignored locally.
+No application credentials, datasets, global settings or unrelated resources are
+included. There is no automatic commit.
+
+### Required host step
+
+From normal Windows PowerShell in this repository, with Docker Desktop running:
+
+```powershell
+& .\scripts\verify-postgres.ps1
+```
+
+The runner recognizes the accepted 3B.2 HEAD and reviewed 3C.1 path inventory,
+uses the existing disposable-target ownership checks, and creates fresh uniquely
+named resources. It does not delete containers or volumes. Review its sanitized
+report and actual 109-test result before accepting 3C.1. Simulated lost
+acknowledgements, Ctrl-C and connection invalidation do not establish actual
+process-crash, OS failure or network-partition recovery. Production targeting,
+automatic retry, raw-response retention and whole-operation deadlines remain
+absent. After acceptance, scope the smallest controlled operational source/config
+step, then bounded read-only queries; no next-milestone work is started here.
+
+## Milestone 3C.1 final acceptance
+
+**MILESTONE 3C.1: ACCEPTED.** The 2026-10-22 review confirms the host evidence,
+implementation contracts and fresh offline quality checks. Acceptance covers
+sequential synthetic ingestion, durable progress and explicit resume in the
+verified disposable PostgreSQL environment. No runtime/test/schema/dependency
+change was needed during acceptance; only documentation records the outcome.
+The implementation-time pending notes above are historical and superseded here.
+
+### Actual host evidence
+
+The exact local evidence directory is
+`artifacts/postgres/hellas-dataops-test-4a43cbabd8ba/`:
+
+- `report.json`: `status=passed`, `stage=complete`, `pytest_exit_code=0`.
+- `pytest.txt`: **109 passed in 33.10 seconds**, no failures/skips/errors reported.
+- `coverage.json`: real storage/coordinator execution, detailed below.
+- Main baseline: `34a9c087adfa28c783dc8e319c6ca6c278b2e49e`.
+- Server: **PostgreSQL 18.6 (Debian 18.6-1.pgdg12+2)**.
+- Image: `postgres:18.6-bookworm`; ID
+  `sha256:bbf83594798e144bff365a9c191c5d779f181fb3135902064ab8ff11918020fc`.
+- Python 3.14.4, pg8000 1.31.5 (`postgresql+pg8000`), SQLAlchemy 2.1.6,
+  Alembic 1.20.0; Docker Server 29.7.2 and Compose 5.4.0.
+
+| Evidence | SHA-256 |
+| --- | --- |
+| report.json | d50424cf79dcbcbc69c2343e0a63a3faabedaea1d560c934046b241ae3e14409 |
+| pytest.txt | 99276576abcbf427411450e4531f6023d9593f4aaeab65e35913d81a5ac55d62 |
+| coverage.json | c0bdfc8982a8026096b6d5c41f7f8004fed981f76e39e6b82cf2928df44f11e1 |
+
+The successful runner path returns zero; the report explicitly records pytest's
+exit code, not a separate shell-process exit-code field. Its completed path
+requires Docker Linux Server access, healthy owned resources and validated mounts,
+loopback binding at `127.0.0.1:52692`, database/user `hellas_dataops_test`, PostgreSQL
+major 18 and the independent ownership marker. Only resources prefixed
+`hellas-dataops-test-4a43cbabd8ba` are addressed. No Docker operation was performed
+in this review. The script does not modify EREN or other project resources; this
+is a workflow/code review conclusion, not a Docker-wide before/after attestation.
+Resources remain retained; none were deleted.
+
+The integration session verifies fresh upgrade to `20261022_0001`, downgrade on
+empty application tables, re-upgrade, final revision and cleanup of synthetic
+records. Its successful teardown is included in pytest exit zero. All 83 existing
+schema/driver/persistence cases and all 26 new operational cases ran. Tests use
+real SQLAlchemy/pg8000 connections; there is no SQLite substitution or mocked
+persistence in this subtree. Before documentation edits, existing distributions
+matched all current source/test/docs byte-for-byte. The report does not include
+source hashes or a signed attestation; evidence is local host execution plus the
+reviewed implementation and archives, not cryptographic proof of execution input.
+
+### Verified guarantees and limits
+
+- Durable registration precedes retrieval; the next chunk is fetched only after
+  the previous chunk commits. Tests inspect persisted completed counts at fetch
+  boundaries and check for absence of idle database transactions during retrieval.
+- Complete provider-day normalization precedes retention and domain validation.
+  One-hour, seven-day, exact 14/15-day, partial-day, leap-day, year and UTC DST
+  boundary cases pass. Nullable measurements remain NULL.
+- Weather, lineage, receipt and successful chunk/run status commit together.
+  Later-chunk failures preserve prior commits without reporting whole-run success.
+- Explicit resume reconstructs stored intent, verifies receipts/current key
+  coverage, skips completed chunks and retains their original receipts and rows.
+  Repeated completed start/resume leaves snapshots unchanged. Changed plan,
+  coordinate/dataset configuration, corrupt receipts and missing weather fail.
+- The same run's competing coordinator connection gets `run_busy` under the
+  session advisory lock. Tests verify ownership release and later resume. Existing
+  persistence concurrency tests still pass for the broader city/version lock.
+- Default changed values are rejected; a new explicitly authorized replacement
+  run retains prior values/lineage. Counts and NULL handling preserve the accepted
+  writer contract. The frozen migration, domain/source APIs, mapping and dependency
+  files are unchanged from the baseline.
+- Injected pre-commit failure rolls back the chunk. Simulated acknowledgement loss
+  after a real commit reconciles its exact receipt without refetching. Deliberate
+  connection invalidation prevents silent reconnection; explicit resume succeeds.
+  Simulated Ctrl-C leaves an incomplete running state that can be resumed.
+
+These tests do not prove actual process-crash, OS failure or network-partition
+recovery, whole-run atomicity, sustained-contention performance or automatic retry.
+A `running` status is not a heartbeat. Arbitrary SQL writers can violate
+application-owned JSON contracts. The city lock serializes disjoint writes for
+that city/version. Only disposable configuration exists; production roles/TLS,
+raw-response retention, retry scheduling and whole-operation/DNS deadlines remain
+absent. These are nonblocking limits for this milestone.
+
+The CLI always binds `fetch_synthetic`, uses in-memory transport and has no live
+flag. Default tests retain network blocking. The programmatic coordinator accepts
+an explicitly injected callable, so it is not a security boundary preventing a
+caller from supplying arbitrary Python code. No live request was made or authorized.
+
+### Coverage and fresh quality checks
+
+| Scope | Statements | Branches | Combined coverage |
+| --- | --- | --- | --- |
+| Host storage + coordinator | 518/570 | 124/164 | 87.47% |
+| Host coordinator | 59/63 | 9/12 | 90.67% |
+| Host run tracking | 161/178 | 48/62 | 87.08% |
+| Fresh offline full package | 1,050/1,142 | 313/360 | 90.75% |
+| Offline coordinator | 63/63 | 12/12 | 100% |
+| Union of host/offline targeted scope | 566/570 | 160/164 | 98.91% |
+
+The union is a set calculation across the two JSON reports, not another test run.
+Most host gaps are input/configuration rejection and offline SQL-generation paths
+covered offline. Four defensive branches remain unexecuted in both reports:
+`persistence.py` rejects an invalid planned-chunk state; `run_tracking.py` rejects
+an existing start with a different plan, invalid failure index/time, and marking
+an already completed chunk failed. Resume-plan conflicts and real success/failure
+transitions are tested. These defensive gaps are recorded, not hidden or excluded.
+No claim of full storage coverage is made.
+
+Fresh results: **837 offline tests passed in 2.93 seconds**, zero failures; 750
+baseline cases plus 87 new cases. Ruff lint and formatting pass (68 Python files).
+Offline `uv lock --check --offline` and compatibility of all 28 installed
+packages pass. uv remains 0.13.4. The documented commands were rerun, with coverage
+written to `artifacts/coverage-3c1-acceptance-offline.json`. Pre-review archives
+passed byte comparisons; acceptance documentation is rebuilt into
+`dist/milestone-3c1-accepted` using the same offline build/verification commands.
+No dependency installation or global configuration change is required for review.
+
+### Reviewed inventory and local checkpoint
+
+The exact milestone inventory remains the **8 created and 11 modified files** in
+[the implementation inventory](#exact-implementation-inventory). The acceptance
+review changes only instruction/documentation content in that inventory. All 81
+version-controlled candidate files and all 19 changed paths are bound by the
+checkpoint manifest. Credentials, local test configuration, reports, environments,
+builds and datasets remain ignored. Content/path review and pattern scanning found
+no blocking privacy issue; scanning is not a proof that all possible secrets are
+absent. Synthetic fixtures, source, tests, documentation and uv.lock remain included.
+
+Git metadata is read-only in this workspace. No staging/commit/escalation is
+attempted. The ignored files `artifacts/checkpoint-3c1.ps1` and
+`artifacts/checkpoint-3c1-manifest.json` prepare exactly one local commit. They
+verify root, main, expected HEAD, reviewed file SHA-256 values and inventory,
+unchanged host evidence, approved noreply author/committer, empty initial staging,
+hooks/filters, staged blobs and diff checks, then verify parent/message/identity,
+committed inventory and clean status. Any failed guard stops the operation.
+
+From ordinary Windows PowerShell in the repository:
+
+```powershell
+& .\artifacts\checkpoint-3c1.ps1
+```
+
+Message: `feat: add resumable operational weather ingestion`. The script does not
+change Git identity/configuration, push, create remotes or change security policy.
+A `-ReviewOnly` invocation performs all pre-staging checks without Git writes.
+If execution policy blocks the script, do not bypass it; report that blocker.
+After the checkpoint, the frozen PostgreSQL runner HEAD must be reviewed during
+the next authorized milestone, not silently bypassed. No new database run is
+required merely to create this checkpoint.
+
+### Recommended next milestone (not started)
+
+**Milestone 3D.1: read-only FastAPI queries over stored synthetic weather.** Reuse
+SQLAlchemy Core and the existing schema. Provide supported-city listing and hourly
+queries with explicit city/dataset/coordinate identity and UTC half-open intervals,
+stable cursor pagination, a bounded page size and documented result limits.
+Expose separate process liveness and bounded database/schema readiness checks,
+returning safe failures without connection details. Include OpenAPI examples,
+offline endpoint/validation tests and opt-in PostgreSQL-backed query tests against
+the existing disposable target. Use a small application factory and explicit
+connection injection; no public ingestion endpoint or repository framework.
+
+This is the shortest next step to a demonstrable ingestion-to-query portfolio MVP.
+The API should serve persisted rows, never synchronously retrieve weather. Live
+Open-Meteo access, production database configuration and the five-city 2025 backfill
+remain separately approved MVP work after service-term/operating-condition review.
+Scheduling, cloud deployment, background workers and extra sources are optional.
+No API implementation or next-milestone dependency change is part of this review.

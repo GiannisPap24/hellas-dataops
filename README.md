@@ -10,12 +10,13 @@ deterministic testing, and measurable performance.
 
 ## Current status
 
-**Milestone 3B.2 ACCEPTED: 83 real PostgreSQL tests and 750 offline tests pass.**
+**Milestone 3C.1 ACCEPTED: 109 real PostgreSQL tests and 837 offline tests pass.**
 Transactional chunk persistence, replay, correction and tested writer contention
-are verified on PostgreSQL 18.6. An operational ingestion command and API are still
-planned; this is not a running weather platform. See the
+are verified on PostgreSQL 18.6. Milestone 3C.1 adds a synthetic-only sequential
+ingestion command and explicit resume, verified against PostgreSQL 18.6.
+This is not a live weather platform. See the [operational guide](docs/ingestion.md),
 [persistence contract](docs/persistence.md) and
-[acceptance evidence](docs/development.md#milestone-3b2-final-acceptance).
+[acceptance evidence](docs/development.md#milestone-3c1-final-acceptance).
 
 Implemented:
 
@@ -43,8 +44,11 @@ Implemented:
 - A uv-managed local environment and resolved dependency lockfile.
 - Verified linting, formatting, coverage, and source/wheel packaging on Windows.
 
-Not yet implemented: an end-to-end persistent ingestion command, automated
-retries/recovery, CLI commands, API endpoints, logging configuration, orchestration,
+Implemented and verified in 3C.1: sequential chunk ingestion,
+durable status/counts, and explicit resume through a synthetic-only Python CLI.
+
+Not yet implemented: live operational ingestion, automated
+retries/recovery, API endpoints, logging configuration, orchestration,
 CI/CD, dashboards, or deployment. No live weather data has been fetched.
 
 ## Intended data scope
@@ -62,9 +66,9 @@ missing-data rules, and provenance requirements.
 
 ## Architecture
 
-One modular monolith shares domain and storage services between future CLI and
-API entry points. A source adapter will fetch data; ingestion will validate and
-persist transactional chunks; the API will query stored data without calling
+One modular monolith shares domain and storage services between the synthetic CLI
+and future API entry points. The coordinator retrieves injected synthetic data,
+validates and persists one chunk at a time; the future API will query stored data without calling
 Open-Meteo on each request.
 
 | Module | Responsibility | Current state |
@@ -72,12 +76,13 @@ Open-Meteo on each request.
 | `config` | Validated settings | Implemented |
 | `domain` | Immutable weather objects and pure validation | Implemented |
 | `sources` | Request planning, HTTP retrieval, response parsing | ERA5 planning, bounded HTTP client, pure normalization; verified offline |
-| `ingestion` | Application workflow and future ingestion lifecycle | Source collection and retention implemented; persistence/recovery deferred |
+| `ingestion` | Application workflow and explicit lifecycle | Sequential synthetic coordinator and start/status/resume CLI; accepted after host verification |
 | `storage` | PostgreSQL schema, mapping and transactions | Accepted schema/migrations and transactional chunk persistence |
 | `api/routes` | FastAPI query endpoints | Reserved package |
 
-See [architecture decisions](docs/architecture.md). CLI and observability modules
-will be added when they contain actual behaviour.
+See [architecture decisions](docs/architecture.md) and the
+[synthetic CLI commands](docs/ingestion.md#local-commands). Observability beyond
+safe errors and persisted status remains planned.
 
 ## Canonical domain
 
@@ -188,9 +193,10 @@ and identify the stage and chunk without returning earlier successful rows.
 
 All 511 existing tests and 55 new component integration cases pass. Tests use
 synthetic byte streams with the real client, normalizer, planner, and validators.
-The socket/DNS guard remains enabled. Live service compatibility, persistence,
-retries, total-request deadlines, and database idempotency remain unverified or
-unimplemented. See [the pipeline contract](docs/data-contract.md#implemented-source-pipeline)
+The socket/DNS guard remains enabled. Live service compatibility, automatic
+retries and total-request deadlines remain unverified or unimplemented. The
+separate storage service now supplies accepted chunk persistence; operational
+integration is now verified by the 3C.1 host run. See [the pipeline contract](docs/data-contract.md#implemented-source-pipeline)
 and [Milestone 2E checks](docs/development.md#milestone-2e-offline-source-pipeline).
 
 ## Development environment
@@ -328,7 +334,7 @@ restricted to the explicit disposable-test API used by the host verification scr
 See [development verification](docs/development.md#milestone-3a-schema-and-migration-foundation)
 for dependency versions, migration checks, and fresh distribution installations.
 
-For Milestone 3B.2 verification, open ordinary Windows PowerShell in the repository root and run:
+For Milestone 3C.1 verification, open ordinary Windows PowerShell in the repository root and run:
 
 ```powershell
 & .\scripts\verify-postgres.ps1
@@ -338,9 +344,11 @@ This creates a new isolated PostgreSQL test environment only after preflight,
 runs migration lifecycle and constraint tests, and writes a sanitized report under
 `artifacts/postgres/`. It never deletes volumes or touches other projects. Read
 [PostgreSQL testing](docs/postgres-testing.md) before execution, including driver
-policy failures and retained-resource limits. The 3B.2 database result is accepted.
-After creating its checkpoint, the runner's frozen HEAD gate requires review in
-the next authorized milestone before another database run.
+policy failures and retained-resource limits. The runner now recognizes the
+accepted 3B.2 checkpoint `34a9c087adfa28c783dc8e319c6ca6c278b2e49e` and collects
+109 PostgreSQL tests (83 existing plus 26 operational cases), all passed in the
+accepted host run. After the 3C.1 checkpoint, review the frozen HEAD gate during
+the next authorized milestone; no further database run is needed for acceptance.
 
 | Environment variable | Default | Accepted values |
 | --- | --- | --- |
@@ -373,8 +381,9 @@ or environment dumps; structured validation errors may still contain inputs.
 | 3A | PostgreSQL Core schema, constraints, initial offline Alembic migration | Implemented and verified offline; no database execution |
 | 3B.1 | Disposable PostgreSQL, guarded migrations, real constraint tests | ACCEPTED: 54 PostgreSQL tests and 699 offline tests pass |
 | 3B.2 | Transactional idempotent writes and rollback | ACCEPTED: 83 PostgreSQL tests and 750 offline tests pass |
-| 4 | CLI ingestion, idempotency, backfills, run tracking, recovery | Planned |
-| 5 | Bounded FastAPI query endpoints and API tests | Planned |
+| 3C.1 | Sequential synthetic CLI ingestion, durable status and explicit resume | ACCEPTED: 837 offline tests and 109 PostgreSQL tests pass |
+| 3D.1 | Small read-only FastAPI layer, bounded queries, health/readiness and OpenAPI | Recommended next; not started |
+| 4 | Controlled live ingestion, operational configuration and full backfill | Separately gated; requires approval and service-terms review |
 | 6 | Controlled end-to-end demonstration, benchmarks, runbook, portfolio evidence | Planned |
 
 Docker Compose packaging, GitHub Actions, scheduling, and a second data source

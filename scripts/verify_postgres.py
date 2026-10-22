@@ -12,7 +12,7 @@ from pathlib import Path
 
 from hellas_dataops.storage.test_database import TestDatabaseConfig
 
-BASELINE = "779313504a658ea5e7768c5e98f420944d47e4ea"
+BASELINE = "34a9c087adfa28c783dc8e319c6ca6c278b2e49e"
 IMAGE = "postgres:18.6-bookworm"
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -113,25 +113,28 @@ def main() -> int:
     try:
         report["working_tree"] = verify_repository()
         report["checkpoint"] = BASELINE
-        # Reviewed 3B.2 changes only; the accepted schema and dependencies are frozen.
+        # Reviewed 3C.1 changes only; the accepted schema and dependencies are frozen.
         allowed = {
             "AGENTS.md",
             "README.md",
-            "tests/conftest.py",
             "tests/unit/test_postgres_runner.py",
-            "tests/unit/test_persistence.py",
-            "tests/unit/test_persistence_mapping.py",
-            "tests/integration/test_persistence.py",
+            "tests/unit/test_coordinator.py",
+            "tests/unit/test_run_tracking.py",
+            "tests/integration/test_operational_ingestion.py",
             "docs/architecture.md",
             "docs/data-contract.md",
             "docs/development.md",
             "docs/storage-schema.md",
             "docs/postgres-testing.md",
             "docs/persistence.md",
+            "docs/ingestion.md",
             "scripts/verify_postgres.py",
             "scripts/verify_installed.py",
-            "src/hellas_dataops/storage/mapping.py",
             "src/hellas_dataops/storage/persistence.py",
+            "src/hellas_dataops/storage/run_tracking.py",
+            "src/hellas_dataops/ingestion/coordinator.py",
+            "src/hellas_dataops/ingestion/__main__.py",
+            "src/hellas_dataops/sources/synthetic.py",
         }
         if any(
             line.split(" ", 1)[-1] not in allowed or line.startswith(("D ", "R ", "C "))
@@ -307,6 +310,7 @@ def main() -> int:
                 "--postgres-config",
                 str(config_file),
                 "--cov=src/hellas_dataops/storage",
+                "--cov=hellas_dataops.ingestion.coordinator",
                 "--cov-report=term-missing",
                 f"--cov-report=json:{report_dir / 'coverage.json'}",
                 "--tb=no",

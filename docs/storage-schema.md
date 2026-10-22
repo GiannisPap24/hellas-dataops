@@ -147,7 +147,7 @@ disposable database, verified the empty Alembic version table, then re-upgraded.
 
 Further database tests must use disposable PostgreSQL, explicit opt-in and target
 safeguards. Beyond the covered server constraints and foreign keys,
-future transactional code must validate rules that this row-level schema does not:
+the accepted writer and new operational boundary validate rules that this row-level schema does not:
 
 - Chunk intervals and JSON provenance agree with the parent run and request.
 - Each weather timestamp belongs to the referenced retained chunk.
@@ -161,3 +161,14 @@ pg8000 1.31.5 is selected for integration testing after Application Control bloc
 Psycopg's native library. Driver imports, dialect construction, and the covered
 real PostgreSQL behavior pass. The host runner verifies driver loading
 before creating Docker resources. See [PostgreSQL testing](postgres-testing.md).
+
+## Milestone 3C.1 lifecycle use
+
+No schema or migration change is required. Existing run and chunk statuses, run
+creation/finish times, chunk retrieval time and JSON success receipts support
+sequential operation and explicit resume. Planned/completed/failed chunk totals
+are derived from persisted chunks; row counts come from original committed
+receipts. Failure stage/time history and an explicit synthetic operation version
+are additive JSON fields. There is no duplicated counter column or new event
+table. These remain application invariants; see [ingestion.md](ingestion.md).
+The initial migration remains byte-for-byte unchanged.

@@ -1,13 +1,14 @@
 # Historical weather data contract
 
-Contract version: **0.6** (additive storage contract; domain/source contracts unchanged).
+Contract version: **0.7** (additive operational provenance; domain/source contracts unchanged).
 Canonical objects and domain validation were implemented
 in Milestone 2A. Milestone 2B implements pure Open-Meteo response normalization.
 Milestone 2C adds offline request planning and request intent provenance.
 Milestone 2D adds bounded HTTP retrieval verified entirely with offline transports.
 Milestone 2E integrates source collection, hourly retention, and final validation.
 Milestone 3A defines the PostgreSQL schema and initial offline migration.
-Persistent ingestion and actual database operations remain planned.
+Milestones 3B.1/3B.2 verified PostgreSQL operations and transactional persistence.
+Milestone 3C.1 verifies synthetic operational ingestion and explicit resume against PostgreSQL.
 All weather test inputs are explicitly synthetic.
 
 ## Implemented HTTP retrieval
@@ -481,7 +482,7 @@ may be null only for a measurement. Empty arrays fail nonempty interval coverage
 | Hourly array | Exact `hourly_units` value | Result |
 | --- | --- | --- |
 | `time` | `unixtime` | `HourlyObservation.timestamp_utc` |
-| `temperature_2m` | `°C` | `HourlyObservation.temperature_c` |
+| `temperature_2m` | `Â°C` | `HourlyObservation.temperature_c` |
 | `relative_humidity_2m` | `%` | `HourlyObservation.relative_humidity_pct` |
 | `precipitation` | `mm` | `HourlyObservation.precipitation_mm` |
 | `wind_speed_10m` | `m/s` | `HourlyObservation.wind_speed_ms` |
@@ -722,3 +723,20 @@ request is part of this milestone's implementation or default tests.
 - [Open-Meteo service terms](https://open-meteo.com/en/terms)
 - [Pricing, access limits, and data attribution](https://open-meteo.com/en/pricing)
 - [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+
+## Operational ingestion provenance (3C.1)
+
+The original requested UTC interval remains immutable on the run and each planned
+request. Complete provider-day responses are validated before retention; hourly
+coverage is not weakened for partial days. Success receipts and observations
+commit in one chunk transaction. Whole-run atomicity is not promised.
+
+The additive `synthetic-sequential-v1` operation marker and safe failure stage/time
+history live in the existing chunk JSON envelope, alongside request intent, policy
+and immutable success receipts. Returned grid coordinates remain separate typed
+columns. Null measurements and prior correction lineage are preserved. Resume
+validates the persisted plan and completed receipts, checks current weather-key
+coverage, then skips only verified completed chunks. Registry/contract mismatches
+are rejected. No response independently proves ERA5, and the operation marker
+explicitly identifies invented synthetic data in the disposable test database.
+See [the operational contract](ingestion.md) for statuses and ambiguous outcomes.

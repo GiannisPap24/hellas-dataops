@@ -4,8 +4,10 @@
 29 persistence cases; final offline verification passed 750 tests. See
 [the acceptance evidence](development.md#milestone-3b2-final-acceptance).
 The accepted 3B.1 schema and revision `20261022_0001` remain unchanged.
-No weather retrieval, scheduler, automatic retry loop, or production connection
-configuration is introduced. The source pipeline and domain remain unchanged.
+The storage writer itself performs no retrieval. Milestone 3C.1 adds the separate
+synthetic coordinator documented in [ingestion.md](ingestion.md); automatic retry,
+scheduling and production connection configuration remain absent. Domain and
+existing source pipeline interfaces are unchanged.
 
 ## Public boundary
 
@@ -45,8 +47,9 @@ are `planned`; persisted chunks are `succeeded`. The run is `running` until ever
 planned chunk has succeeded, then `succeeded`, with the maximum recorded completion
 time. Chunks may arrive out of order. A failure rolls back that call's data and
 provenance changes, leaving earlier committed chunks intact. It does not write a
-separate failed status outside the transaction. An externally failed run requires
-a new UUID. There is no background recovery worker or retry/backoff policy.
+separate failed status outside the transaction. Direct persistence rejects failed runs. The new operational boundary can
+deliberately resume its own validated synthetic plans, resetting failed states
+before calling the unchanged write rules; arbitrary legacy failed runs are not adopted. There is no background recovery worker or retry/backoff policy.
 
 ## Policies, counts and replay
 
@@ -125,14 +128,11 @@ connections with a server-observed lock wait. Synthetic test records are removed
 by their known identities; no volumes or unrelated resources are deleted.
 
 Run `& .\scripts\verify-postgres.ps1` from the project in normal PowerShell.
-The runner requires the accepted 3B.1 checkpoint
-`779313504a658ea5e7768c5e98f420944d47e4ea`, permits only reviewed 3B.2 edits,
-and creates a new isolated test environment. It runs the existing migration and
-constraint tests plus persistence tests. The accepted report is
-`artifacts/postgres/hellas-dataops-test-309003857997/report.json` (ignored locally).
-After the 3B.2 checkpoint, update the runner baseline only as part of the next
-approved milestone. No further database run or resource deletion is required for
-this acceptance review.
+The current runner requires the accepted 3B.2 checkpoint
+`34a9c087adfa28c783dc8e319c6ca6c278b2e49e` and permits reviewed 3C.1 edits only.
+It runs 83 existing database cases plus 26 operational lifecycle cases; all 109
+passed in the accepted 3C.1 host run. The historical accepted 3B.2 report remains
+`artifacts/postgres/hellas-dataops-test-309003857997/report.json`.
 
 Host storage coverage is 87.02% combined (295/326 statements, 67/90 branches).
 Persistence itself is 90.98% combined in that run. Offline tests exercise most
@@ -140,3 +140,12 @@ remaining validation and configuration errors. The union of both coverage report
 leaves one defensive invalid-chunk-state rejection untested. Commit-acknowledgement
 loss, process crashes, sustained contention and automatic recovery were not tested.
 Successful retry after an injected rollback does not establish those guarantees.
+
+### Additive lifecycle fields
+
+The writer preserves operational envelope fields when appending a success receipt.
+`storage.run_tracking` shares identity/plan preparation and the same internal Core
+writer, adding registration before retrieval and explicit failed-run resume. These
+changes do not alter `persist_chunk` inputs/results or replay/correction policy.
+The 3C.1 host suite verifies the documented lifecycle scenarios. See
+[acceptance evidence and remaining limits](development.md#milestone-3c1-final-acceptance).
