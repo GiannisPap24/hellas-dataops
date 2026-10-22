@@ -29,6 +29,7 @@ def main() -> None:
             "MANIFEST.in",
             "uv.lock",
             "alembic.ini",
+            "compose.postgres-test.yaml",
             ".env.example",
             ".python-version",
         )
@@ -37,7 +38,7 @@ def main() -> None:
         ("src/hellas_dataops", ("*.py", "*.mako")),
         ("docs", ("*.md",)),
         ("tests", ("*.py", "*.md", "*.json")),
-        ("scripts", ("*.py",)),
+        ("scripts", ("*.py", "*.ps1")),
     ):
         for pattern in patterns:
             required.update(

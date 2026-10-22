@@ -1,7 +1,9 @@
 # Development and verification
 
 For the current integrated workflow, see [Milestone 2E](#milestone-2e-offline-source-pipeline).
-The current schema and distribution verification is recorded in
+The current accepted database verification is recorded in
+[Milestone 3B.1 final acceptance](#milestone-3b1-final-acceptance).
+The schema checkpoint is recorded in
 [Milestone 3A](#milestone-3a-schema-and-migration-foundation).
 Earlier records below remain historical.
 
@@ -567,3 +569,392 @@ suite and keep HTTP retrieval outside transactions. No service may be started
 merely to run the default tests. Whole-request/DNS deadlines, upstream service
 eligibility, raw-response retention, and a repository code licence remain separate
 unresolved decisions. Do not start 3B without owner approval.
+
+## Milestone 3B.1: host-assisted PostgreSQL verification
+
+Historical initial Psycopg implementation record. The pg8000 remediation section
+below supersedes its driver selection, setup commands, counts, and limitations.
+
+This section supersedes the historical 3A limitations above. Implementation is
+prepared, but real PostgreSQL verification is **pending**. The repository was
+clean on `main` at `6a0439522cd9d1bd17005850a5b718730ef44c28` before these edits.
+No Git metadata was written. The existing domain, source pipeline, Core schema,
+initial revision `20261022_0001`, and socket/DNS test guard remain unchanged.
+
+The new guarded migration API accepts only an explicit disposable test target.
+The host runner creates fresh uniquely named Compose resources and verifies
+server identity before writes. See [PostgreSQL verification](postgres-testing.md)
+for the single host command, connection safeguards, migration procedures,
+reports, and cleanup boundaries. No container or database was created from Codex.
+
+### Dependencies and environment
+
+Verified interpreter: CPython **3.14.4, Windows AMD64**, local uv **0.13.4**.
+Added **psycopg 3.3.6**, **psycopg-binary 3.3.6**, and its timezone dependency
+**tzdata 2026.5** using the standard package index:
+
+```powershell
+& ./.tools/uv/bin/uv.exe add 'psycopg[binary]>=3.3.6,<3.4' --default-index https://pypi.org/simple
+```
+
+The lock was genuinely resolved; every pre-existing package version is unchanged.
+SQLAlchemy **2.1.6**, Alembic **1.20.0**, pytest **9.1.1**, pytest-cov **7.1.0**,
+Ruff **0.17.1**, and setuptools **84.2.0** remain installed. Metadata resolution
+and compatibility checks pass for **25 development-environment packages**.
+
+The available CPython 3.14 Windows x64 binary wheel installed, but **native
+Psycopg loading failed with an Application Control policy error inside Codex**.
+Installation and matching wheel tags do not prove operational compatibility.
+The host runner performs an actual driver import before any Docker operation.
+If it also fails on the host, stop for a supported policy/installation review;
+do not change Windows security controls or install alternate binaries to evade it.
+
+### Checks executed in Codex
+
+The complete offline suite passes **676 tests, 0 failures**: the 610-test baseline
+plus 66 new configuration/host-runner tests. Package coverage is **662/662
+statements and 218/218 branches (100%)**. The new database safety module covers
+**74/74 statements and 22/22 branches**; migration orchestration covers **34/34
+statements and 8/8 branches**. Mocked host-runner tests separately cover **131/137
+statements (95.6%) and 29/34 branches (85.3%)** in `scripts/verify_postgres.py`.
+These mocks verify safety/control flow, not Docker or database correctness.
+
+Ruff lint passes; formatting checks **53 Python files**. Offline lock checking,
+locked sync, and dependency compatibility pass without changing the lock hash:
+`1580C986BDD76D5A57BEF263E76B2A376407B88EDCC790370681222CB306F8BC`.
+Client-side Compose validation and PowerShell syntax parsing pass without engine
+access. The actual host-runner preflight was exercised in Codex and safely stopped
+at `psycopg-driver-import`, before any Docker command or credential generation.
+
+**52 PostgreSQL cases are collected but have not run against a database.**
+The opt-in gate rejects their execution without `--postgres-config`. Upgrade,
+downgrade, re-upgrade, real constraints, and TIMESTAMPTZ behavior remain unverified
+until the host run passes. Review of installed Alembic confirmed that downgrade
+to base retains an empty `alembic_version` table; the integration assertion
+expects that behavior, rather than incorrectly requiring no tables whatsoever.
+No schema defect or real database result is claimed from this review.
+
+Run quality checks from the repository root, stopping on nonzero exit codes:
+
+```powershell
+$env:UV_CACHE_DIR = Join-Path $PWD '.uv-cache'
+$env:UV_PYTHON_DOWNLOADS = 'never'
+$env:UV_LINK_MODE = 'copy'
+$env:TEMP = Join-Path $PWD '.tools/tmp'
+$env:TMP = $env:TEMP
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = '1'
+& ./.venv/Scripts/python.exe -I -B -m pytest -p no:cacheprovider -p pytest_cov --cov=src/hellas_dataops --cov-report=term-missing --cov-report=json:artifacts/coverage-3b1.json -q
+& ./.venv/Scripts/ruff.exe check .
+& ./.venv/Scripts/ruff.exe format --check .
+$lockBefore = (Get-FileHash uv.lock -Algorithm SHA256).Hash
+& ./.tools/uv/bin/uv.exe lock --check --offline
+& ./.tools/uv/bin/uv.exe sync --locked --offline
+& ./.tools/uv/bin/uv.exe pip check --offline --python .venv/Scripts/python.exe
+if ($lockBefore -ne (Get-FileHash uv.lock -Algorithm SHA256).Hash) { throw 'Lockfile changed' }
+```
+
+### Distribution procedure
+
+Both distributions built successfully. Archive verification compared **65 source
+assets**, including **3 JSON fixtures and 7 documentation files**, and **23 wheel
+modules plus the Alembic template** byte-for-byte. Compose and both host scripts
+are included in the source distribution; local configuration, secrets, reports,
+environments, and caches are excluded. Both fresh isolated installations passed
+**26 imports**, offline migration generation, configuration/planning/mocked HTTP
+smoke checks, and compatibility checks for **15 runtime-environment packages**.
+These results do not include native Psycopg loading or any database connection.
+
+Use fresh project-local verification directories; do not overwrite an existing
+environment. `Invoke-Checked` is defined in the historical distribution procedure
+above and stops on any command failure. These checks intentionally import storage
+without connecting or importing the blocked native driver. Driver loading has a
+separate, failed verification result; fresh package installation cannot override it.
+
+```powershell
+Invoke-Checked ./.tools/uv/bin/uv.exe build --offline --no-build-isolation --python .venv/Scripts/python.exe --out-dir dist/milestone-3b1
+Invoke-Checked ./.venv/Scripts/python.exe -I -B scripts/verify_distributions.py dist/milestone-3b1
+Invoke-Checked ./.tools/uv/bin/uv.exe export --locked --offline --no-dev --no-emit-project --format requirements.txt --output-file .tools/runtime-requirements-3b1.txt | Out-Null
+foreach ($kind in @('wheel', 'sdist')) {
+    $envPath = ".tools/$kind-check-3b1"
+    if (Test-Path $envPath) { throw 'Use a fresh verification directory' }
+    Invoke-Checked ./.tools/uv/bin/uv.exe venv $envPath --python .venv/Scripts/python.exe --no-managed-python --offline
+    $checkPython = "$envPath/Scripts/python.exe"
+    Invoke-Checked $checkPython -I -B -c "import importlib.util as u; assert all(u.find_spec(n) is None for n in ['hellas_dataops','pydantic','pytest','sqlalchemy','alembic','psycopg']); print('Fresh environment confirmed')"
+    Invoke-Checked ./.tools/uv/bin/uv.exe pip sync --python $checkPython --offline --require-hashes .tools/runtime-requirements-3b1.txt
+    $package = if ($kind -eq 'wheel') { 'dist/milestone-3b1/hellas_dataops-0.1.0.dev0-py3-none-any.whl' } else { 'dist/milestone-3b1/hellas_dataops-0.1.0.dev0.tar.gz' }
+    Invoke-Checked ./.tools/uv/bin/uv.exe pip install --python $checkPython --offline --no-deps $package
+    Invoke-Checked $checkPython -I -B scripts/verify_installed.py
+    Invoke-Checked ./.tools/uv/bin/uv.exe pip check --offline --python $checkPython
+}
+```
+
+Milestone 3B.1 can be declared complete only after reviewing successful real host
+results. Milestone 3B.2 requires separate approval for domain/storage mappings,
+transactional idempotent chunk writes, lineage/correction policy, concurrency,
+and atomic failure/recovery behavior. No application persistence was implemented.
+
+## Milestone 3B.1 driver remediation: pg8000
+
+Historical remediation record; the final acceptance section below supersedes
+its pending host-verification statements. The preceding Psycopg record is historical.
+The owner-host report and Codex preflight stopped at `psycopg-driver-import`.
+A controlled local import reproduced `ImportError` with an Application Control
+DLL rejection. This establishes a native-loading policy failure, not an SQL,
+authentication, or migration failure; it does not identify which DLL or policy
+rule was responsible. No security settings, file permissions, or policies changed.
+
+The approved alternative **pg8000 1.31.5** now imports successfully on **CPython
+3.14.4 Windows AMD64**. SQLAlchemy **2.1.6**, Alembic **1.20.0**, uv **0.13.4**,
+and all pre-existing non-driver package versions remain unchanged. Psycopg and
+psycopg-binary are removed from the lock and active environment. Added dependency
+versions are pg8000 1.31.5, scramp 1.4.17, asn1crypto 1.5.1, python-dateutil 3.0.0,
+and six 1.17.0. Existing tzdata 2026.5 remains required by python-dateutil.
+All six packages in this driver's dependency closure have pure-Python wheel
+metadata and contain no `.pyd`, `.dll`, or `.so` files. Existing unrelated native
+dependencies are unchanged.
+
+Official references and compatibility limits are in
+[PostgreSQL testing](postgres-testing.md). Local tests exercise real driver
+imports, SQLAlchemy dialect construction, DBAPI argument validation, bound-value
+conversion, UTC timestamp codecs, and decoding of synthetic server error fields.
+They do not simulate successful PostgreSQL enforcement or establish real database
+transaction correctness. The host suite is still required.
+
+### Minimal implementation changes
+
+- Use `postgresql+pg8000`, `timeout`, `ssl_context`, and `startup_params` instead
+  of Psycopg/libpq-specific options. Preserve numeric loopback target validation,
+  ownership verification, timeouts, UTC, public search path, and migration guards.
+- Preflight imports the actual pg8000 driver and SQLAlchemy dialect before Docker.
+  The existing PowerShell entry point is unchanged and invokes the updated runner.
+- Integration tests alone permit their configured numeric localhost port. DNS and
+  other destinations remain blocked; default offline networking protection is unchanged.
+- Constraint assertions require the exact server SQLSTATE and constraint name from
+  pg8000's `DatabaseError` payload. No broad success-on-any-error behavior is used.
+- Add real-database tests for binding/session settings and savepoint rollback.
+  Preserve all 52 original PostgreSQL cases, schema definitions, and initial revision.
+
+### Verification and exact commands
+
+**699 offline tests pass, 0 failures**, including 23 new remediation tests. Package
+coverage remains **662/662 statements and 218/218 branches (100%)**. Database safety
+configuration covers **74/74 statements and 22/22 branches**; migration code covers
+**34/34 statements and 8/8 branches**. Ruff lint and formatting pass (54 Python
+files). The **54 PostgreSQL cases are collected only; none has run on a server**.
+Client-side Compose validation and PowerShell syntax checks pass without Docker
+engine access. No container or database was created during remediation.
+
+Offline lock checking, locked synchronization, and compatibility pass for **28
+development-environment packages**, without changing lock SHA-256
+`576C2E67E36C516B2A763BD5BCF199525ED89875BDC7A382178779379EA52AB9`.
+
+Separate offline coverage of the host runner is **136/140 statements (97.1%) and
+29/34 branches (85.3%)**. The integration network restriction helper and its
+callbacks have full statement/branch coverage; integration fixture lifecycle
+execution remains pending real PostgreSQL. Both distributions build and pass
+byte-for-byte checks for **66 source assets**, **3 JSON fixtures**, **7 documentation
+files**, and **23 wheel modules plus the Alembic template**. Both fresh isolated
+installations pass **32 imports**, including the real pg8000 driver and dependencies,
+dialect construction, offline migration/smoke checks, and compatibility checks for
+**18 runtime-environment packages**. No PostgreSQL connection is implied by these
+installation results. Archive checks exclude local secrets and generated artifacts.
+
+Run commands from the repository root, stopping on any failure. The first install
+attempt resolved packages but failed to build the editable project because its
+default temporary directory was not writable. Using the already-approved
+project-local temporary directory resolved that build-path issue; no permission
+or security setting was changed.
+
+```powershell
+$env:UV_CACHE_DIR = Join-Path $PWD '.uv-cache'
+$env:UV_PYTHON_DOWNLOADS = 'never'
+$env:UV_LINK_MODE = 'copy'
+$env:TEMP = Join-Path $PWD '.tools/tmp'
+$env:TMP = $env:TEMP
+# Already executed dependency migration; do not repeat during routine verification:
+# ./.tools/uv/bin/uv.exe add 'pg8000>=1.31.5,<1.32' --default-index https://pypi.org/simple
+# ./.tools/uv/bin/uv.exe remove psycopg --offline
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = '1'
+& ./.venv/Scripts/python.exe -I -B -m pytest -p no:cacheprovider -p pytest_cov --cov=src/hellas_dataops --cov-report=term-missing --cov-report=json:artifacts/coverage-pg8000.json -q
+& ./.venv/Scripts/ruff.exe check .
+& ./.venv/Scripts/ruff.exe format --check .
+& ./.tools/uv/bin/uv.exe lock --check --offline
+& ./.tools/uv/bin/uv.exe sync --locked --offline
+& ./.tools/uv/bin/uv.exe pip check --offline --python .venv/Scripts/python.exe
+& ./.venv/Scripts/python.exe -I -B -c "import pg8000, sqlalchemy, alembic; print(pg8000.__version__, sqlalchemy.__version__, alembic.__version__)"
+```
+
+Build/install verification uses the earlier `Invoke-Checked` helper and fresh
+directories, with `UV_*` and temporary-directory settings above:
+
+```powershell
+Invoke-Checked ./.tools/uv/bin/uv.exe build --offline --no-build-isolation --python .venv/Scripts/python.exe --out-dir dist/milestone-3b1-pg8000
+Invoke-Checked ./.venv/Scripts/python.exe -I -B scripts/verify_distributions.py dist/milestone-3b1-pg8000
+Invoke-Checked ./.tools/uv/bin/uv.exe export --locked --offline --no-dev --no-emit-project --format requirements.txt --output-file .tools/runtime-requirements-pg8000.txt | Out-Null
+foreach ($kind in @('wheel', 'sdist')) {
+    $envPath = ".tools/$kind-check-pg8000"
+    if (Test-Path $envPath) { throw 'Use a fresh verification directory' }
+    Invoke-Checked ./.tools/uv/bin/uv.exe venv $envPath --python .venv/Scripts/python.exe --no-managed-python --offline
+    $checkPython = "$envPath/Scripts/python.exe"
+    Invoke-Checked $checkPython -I -B -c "import importlib.util as u; assert all(u.find_spec(n) is None for n in ['hellas_dataops','pg8000','sqlalchemy','alembic']); print('Fresh environment confirmed')"
+    Invoke-Checked ./.tools/uv/bin/uv.exe pip sync --python $checkPython --offline --require-hashes .tools/runtime-requirements-pg8000.txt
+    $package = if ($kind -eq 'wheel') { 'dist/milestone-3b1-pg8000/hellas_dataops-0.1.0.dev0-py3-none-any.whl' } else { 'dist/milestone-3b1-pg8000/hellas_dataops-0.1.0.dev0.tar.gz' }
+    Invoke-Checked ./.tools/uv/bin/uv.exe pip install --python $checkPython --offline --no-deps $package
+    Invoke-Checked $checkPython -I -B scripts/verify_installed.py
+    Invoke-Checked ./.tools/uv/bin/uv.exe pip check --offline --python $checkPython
+}
+```
+
+Run `& .\scripts\verify-postgres.ps1` in normal host PowerShell for real PostgreSQL
+verification. Docker named-pipe restrictions inside Codex remain unchanged and
+were not retried or escalated. Review the generated sanitized report before
+declaring 3B.1 complete. Milestone 3B.2 remains unimplemented and requires approval.
+
+## Milestone 3B.1 final acceptance
+
+**ACCEPTED on 2026-10-22.** There are no remaining acceptance blockers for the
+schema/migration/integration scope. This acceptance does not authorize Milestone
+3B.2 or claim application ingestion, idempotency, recovery, or production readiness.
+Only documentation changed during this acceptance review; tested runtime code,
+schema, migration revision, dependency lock, and test assertions were preserved.
+
+### Actual host evidence
+
+Reviewed local evidence directory:
+`artifacts/postgres/hellas-dataops-test-2d8dbdd628c8/`.
+
+| Evidence | Verified result |
+| --- | --- |
+| `report.json` | `status=passed`, `stage=complete`, `pytest_exit_code=0` |
+| `pytest.txt` | 54 passed, zero failures/skips, 2.64 seconds |
+| PostgreSQL | 18.6 (Debian 18.6-1.pgdg12+2) |
+| Driver | postgresql+pg8000; pg8000 1.31.5 |
+| SQLAlchemy / Alembic | 2.1.6 / 1.20.0 |
+| Docker Engine / Compose | 29.7.2 / 5.4.0 |
+| Official image | postgres:18.6-bookworm |
+| Image ID | sha256:bbf83594798e144bff365a9c191c5d779f181fb3135902064ab8ff11918020fc |
+| Host binding | 127.0.0.1:53584, container port 5432 |
+| Initial Git checkpoint | 6a0439522cd9d1bd17005850a5b718730ef44c28 |
+
+The report stores the pytest exit code explicitly. The reviewed runner reaches
+`stage=complete` only after all checks and returns zero on that path; the owner
+also reported no PowerShell error. A separate wrapper process exit-code field
+was not recorded. No claim is made that this is a signed execution attestation.
+
+SHA-256 evidence fingerprints (raw reports remain ignored):
+
+```text
+report.json  a149151d5be3a4690a2718af53296d1865f2800438f0c7a6f425d861264fe679
+pytest.txt   352f3a4d517acd3df0babfc4e93d77cdb8a8c762624108ef51ecd16a1b15a4be
+coverage.json fd64f7c6ce45680e64bb850c3531b7cea0aa3f98a679b97bea0926dfe5e1a046
+```
+
+The real session fixture required an empty, verified disposable database; upgraded
+to `20261022_0001`; checked six tables including Alembic's version table; downgraded
+to base; verified only the empty version table remained; and re-upgraded. Session
+teardown verified empty application tables and the installed revision. Every
+constraint test used a real pg8000 connection with transaction rollback. There is
+no mocked database or SQLite fallback in this integration suite.
+
+The 54 cases cover catalog/metadata agreement (types, nullable flags, keys, checks,
+and nonredundant indexes), duplicate city/version and dataset identities, distinct
+coordinate versions, duplicate hourly keys, all-null measurements, numerical
+bounds including NaN/infinities, foreign keys and mismatched run lineage, interval
+order/alignment, metadata rules, UTC instants under three session timezones,
+ownership/populated-table/unknown-table guards, parameter binding, session settings,
+and savepoint rollback. Metadata agreement alone is not interpreted as enforcement
+of every conceivable CHECK/input combination.
+
+### Isolation review
+
+The accepted runner checks Linux Engine availability and health, refuses resource
+name collisions, validates labels/image/mounts/network and localhost-only mapping,
+and verifies database/user/version plus a per-run ownership marker before writes.
+All Docker mutations target the unique `hellas-dataops-test-2d8dbdd628c8` project;
+there are no commands to start, stop, delete, or reset EREN or other project
+resources. No cleanup was performed, and no Docker access was attempted during
+this review. Source review and successful guard execution support this isolation
+conclusion; no global before/after Docker inventory was captured, so unrelated
+activity by other host processes cannot be independently audited from this report.
+
+### Coverage and repeated quality checks
+
+The host's rounded **88%** is combined statement/branch coverage:
+**135/149 statements (90.60%) + 22/30 branches (73.33%) = 157/179 (87.71%)**.
+All initial revision operations and schema-definition statements executed.
+The 14 missing statements are offline SQL generation and rejection/error paths:
+arbitrary migration URL, missing explicit configuration, invalid identifiers or
+credentials, duplicate/malformed JSON, wrong target object, and connection failure.
+These paths are covered in the offline suite, rather than by successful host setup.
+
+The acceptance rerun passed **699 offline tests, zero failures**, in 2.54 seconds,
+with **662/662 package statements and 218/218 branches (100%)**. Ruff lint passed,
+and format checking reported 54 files already formatted. Offline `uv lock --check`
+and `uv pip check` passed for 28 installed packages; lock SHA-256 remains
+`576C2E67E36C516B2A763BD5BCF199525ED89875BDC7A382178779379EA52AB9`.
+Python is 3.14.4; uv 0.13.4; pytest 9.1.1; pytest-cov 7.1.0; Ruff 0.17.1.
+Before documentation updates, the existing distribution verifier confirmed all
+66 source assets and 23 wheel modules matched the reviewed working files exactly.
+The prior fresh-installation checks remain valid for unchanged runtime code;
+the old archives contain pre-acceptance documentation and should be rebuilt for
+any future release. No release or publication is part of this checkpoint.
+
+Actual database connection-loss/timeout behavior, crash-interrupted DDL,
+concurrency, and production role/TLS configuration remain untested. TIMESTAMPTZ
+preserves instants, not the original caller's offset; UTC input requirements remain
+domain rules. The explicit image tag can change upstream; the observed image ID
+is recorded above. Retained test resources consume local disk/memory until the
+owner separately reviews cleanup. These are nonblocking limitations for 3B.1.
+
+### Complete 3B.1 checkpoint inventory
+
+Relative to the initial 3A commit: **15 modified and 10 new files**, none deleted.
+
+```text
+Modified:
+AGENTS.md
+MANIFEST.in
+README.md
+alembic.ini
+docs/architecture.md
+docs/data-contract.md
+docs/development.md
+docs/storage-schema.md
+pyproject.toml
+scripts/verify_distributions.py
+scripts/verify_installed.py
+src/hellas_dataops/storage/migration.py
+src/hellas_dataops/storage/migrations/env.py
+tests/unit/test_migrations.py
+uv.lock
+
+New:
+compose.postgres-test.yaml
+docs/postgres-testing.md
+scripts/verify-postgres.ps1
+scripts/verify_postgres.py
+src/hellas_dataops/storage/test_database.py
+tests/integration/conftest.py
+tests/integration/test_postgres.py
+tests/unit/test_pg8000.py
+tests/unit/test_postgres_runner.py
+tests/unit/test_test_database.py
+```
+
+Git metadata is read-only in Codex. No metadata writes or escalation were attempted.
+An ignored owner-side `artifacts/checkpoint-3b1.ps1` and SHA-256 manifest prepare
+one local commit, validating root, main branch, baseline HEAD, clean index,
+approved noreply author/committer, exact reviewed working files, staged inventory,
+and cached whitespace checks. The script neither changes Git identity nor pushes.
+Run it from normal PowerShell only after reviewing this acceptance record:
+
+```powershell
+& .\artifacts\checkpoint-3b1.ps1
+```
+
+After that commit, the host verification runner's frozen 3A HEAD gate intentionally
+requires review before another database run. Update it within the next authorized
+milestone rather than bypassing it. Recommended 3B.2 scope: explicit domain/storage
+mappings, idempotent transactional chunk writes, correction/lineage policy, atomic
+completion, concurrency, and injected failure/recovery tests on disposable
+PostgreSQL. No live weather calls, API endpoints, or deployment are implied.

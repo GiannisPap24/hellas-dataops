@@ -10,7 +10,7 @@ deterministic testing, and measurable performance.
 
 ## Current status
 
-**Milestone 3A - PostgreSQL schema and offline migration foundation.** This is an early scaffold,
+**Milestone 3B.1 ACCEPTED: 54 real PostgreSQL tests and 699 offline tests pass.** This is an early scaffold,
 not a running weather platform.
 
 Implemented:
@@ -31,13 +31,15 @@ Implemented:
   normalization, hourly retention, final coverage validation, and chunk provenance.
 - Five SQLAlchemy Core tables with explicit identity, lineage, UTC, and measurement
   constraints; a frozen initial Alembic revision with offline SQL generation.
+- A guarded host-assisted PostgreSQL test workflow, isolated Compose configuration,
+  and opt-in database tests, verified on PostgreSQL 18.6 with pg8000 1.31.5.
 - Architecture, data, safety, and contribution instructions.
 - A uv-managed local environment and resolved dependency lockfile.
 - Verified linting, formatting, coverage, and source/wheel packaging on Windows.
 
 Not yet implemented: persistent weather ingestion, retries/recovery, CLI commands,
-database execution, API endpoints, logging configuration, orchestration,
-containers, CI/CD, dashboards, or deployment. No live weather data has been fetched.
+application database writes, API endpoints, logging configuration, orchestration,
+CI/CD, dashboards, or deployment. No live weather data has been fetched.
 
 ## Intended data scope
 
@@ -65,7 +67,7 @@ Open-Meteo on each request.
 | `domain` | Immutable weather objects and pure validation | Implemented |
 | `sources` | Request planning, HTTP retrieval, response parsing | ERA5 planning, bounded HTTP client, pure normalization; verified offline |
 | `ingestion` | Application workflow and future ingestion lifecycle | Source collection and retention implemented; persistence/recovery deferred |
-| `storage` | PostgreSQL schema and future queries/transactions | Core metadata and offline Alembic migration; database execution deferred |
+| `storage` | PostgreSQL schema and future queries/transactions | Core metadata, offline/guarded online migrations, real PostgreSQL constraint verification; application persistence deferred |
 | `api/routes` | FastAPI query endpoints | Reserved package |
 
 See [architecture decisions](docs/architecture.md). CLI and observability modules
@@ -196,11 +198,16 @@ executable was on this execution session's PATH. An earlier report of 0.13.3 in
 another PowerShell session cannot be confirmed here; commands below explicitly
 select the verified project-local executable and do not change other installs.
 
-Runtime dependencies are Pydantic, pydantic-settings, SQLAlchemy, and Alembic. The separate `dev`
+Runtime dependencies are Pydantic, pydantic-settings, SQLAlchemy, Alembic, and the
+pure-Python PostgreSQL driver pg8000. The separate `dev`
 dependency group contains pytest, pytest-cov, Ruff, and the pinned setuptools
 build backend. `uv.lock` records resolved versions and package hashes. Keep the
 lockfile under version control. The HTTP client uses the standard library;
-third-party HTTP clients, PostgreSQL drivers, and API frameworks are still absent.
+third-party HTTP clients and API frameworks are still absent. pg8000 replaces
+Psycopg after Windows Application Control rejected its native library. Driver
+imports and compatibility checks pass on Python 3.14.4. The host workflow passed
+54 tests on PostgreSQL 18.6 without security-policy changes. See the
+[acceptance evidence](docs/development.md#milestone-3b1-final-acceptance).
 
 ### Windows setup and installation
 
@@ -310,9 +317,22 @@ Generate PostgreSQL SQL without a server or driver:
 & ./.venv/Scripts/python.exe -I -B -m alembic -c alembic.ini upgrade head --sql
 ```
 
-This emits SQL only. Online migration commands deliberately fail in Milestone 3A.
+This emits SQL only. Generic online CLI commands still fail; online execution is
+restricted to the explicit disposable-test API used by the host verification script.
 See [development verification](docs/development.md#milestone-3a-schema-and-migration-foundation)
 for dependency versions, migration checks, and fresh distribution installations.
+
+For Milestone 3B.1, open ordinary Windows PowerShell in the repository root and run:
+
+```powershell
+& .\scripts\verify-postgres.ps1
+```
+
+This creates a new isolated PostgreSQL test environment only after preflight,
+runs migration lifecycle and constraint tests, and writes a sanitized report under
+`artifacts/postgres/`. It never deletes volumes or touches other projects. Read
+[PostgreSQL testing](docs/postgres-testing.md) before execution, including driver
+policy failures and retained-resource limits. No real database result is claimed yet.
 
 | Environment variable | Default | Accepted values |
 | --- | --- | --- |
@@ -343,7 +363,8 @@ or environment dumps; structured validation errors may still contain inputs.
 | 2D | HTTP client with injected mocked transport, bounded responses, and error tests | Implemented and verified offline; no live calls |
 | 2E | In-memory source pipeline, retained-hour filtering, complete coverage, chunk provenance | Implemented and verified offline; no persistence |
 | 3A | PostgreSQL Core schema, constraints, initial offline Alembic migration | Implemented and verified offline; no database execution |
-| 3B | Disposable PostgreSQL, migration enforcement, transactional persistence | Proposed; requires separate approval |
+| 3B.1 | Disposable PostgreSQL, guarded migrations, real constraint tests | ACCEPTED: 54 PostgreSQL tests and 699 offline tests pass |
+| 3B.2 | Transactional idempotent writes and failure recovery | Deferred; separate approval required |
 | 4 | CLI ingestion, idempotency, backfills, run tracking, recovery | Planned |
 | 5 | Bounded FastAPI query endpoints and API tests | Planned |
 | 6 | Controlled end-to-end demonstration, benchmarks, runbook, portfolio evidence | Planned |

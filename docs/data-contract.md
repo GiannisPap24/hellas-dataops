@@ -665,10 +665,12 @@ from observations to the matching run and chunk. JSON storage does not prove the
 historical model delivered. The source contract version stored with the dataset
 is the planner's version, not this document's revision number.
 
-Only definitions and offline SQL generation exist. Database enforcement, actual
-migration/rollback, idempotent writes, configuration immutability, cross-row
-interval agreement, and failure recovery require disposable PostgreSQL tests in
-Milestone 3B. No canonical domain or source interface changed in this milestone.
+Milestone 3B.1 adds guarded online test migrations and opt-in real PostgreSQL
+tests. The accepted host run passed 54 tests on PostgreSQL 18.6, including covered
+constraints, upgrade/downgrade/re-upgrade, and UTC instant round trips. Idempotent
+writes, configuration immutability, cross-row interval agreement, and recovery
+remain future application responsibilities in 3B.2. No canonical domain or source
+interface changed. See [the host procedure](postgres-testing.md).
 
 ## Usage terms and data licence
 

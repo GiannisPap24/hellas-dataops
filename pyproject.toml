@@ -19,6 +19,7 @@ classifiers = [
 # Compatibility ranges are resolved in uv.lock; keep runtime dependencies minimal.
 dependencies = [
     "alembic>=1.20,<2",
+    "pg8000>=1.31.5,<1.32",
     "pydantic>=2.13,<3",
     "pydantic-settings>=2.15,<3",
     "sqlalchemy>=2.1.5,<2.2",
@@ -37,18 +38,18 @@ dev = [
 where = ["src"]
 include = ["hellas_dataops*"]
 
-[tool.setuptools.package-data]
-"hellas_dataops.storage.migrations" = ["script.py.mako"]
-
 [[tool.uv.index]]
 url = "https://pypi.org/simple"
 default = true
+
+[tool.setuptools.package-data]
+"hellas_dataops.storage.migrations" = ["script.py.mako"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]
 addopts = "--strict-config --strict-markers --import-mode=importlib"
 markers = [
-    "integration: future tests requiring an explicitly configured disposable PostgreSQL database",
+    "integration: explicit host-assisted tests against a verified disposable PostgreSQL database",
 ]
 
 [tool.ruff]

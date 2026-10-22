@@ -3,7 +3,8 @@ include .env.example
 include .python-version
 include uv.lock
 include alembic.ini
+include compose.postgres-test.yaml
 recursive-include src/hellas_dataops/storage/migrations *.mako
 recursive-include docs *.md
 recursive-include tests *.py *.md *.json
-recursive-include scripts *.py
+recursive-include scripts *.py *.ps1

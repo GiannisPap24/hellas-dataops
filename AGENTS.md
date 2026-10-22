@@ -7,19 +7,25 @@ monolith for reliable historical weather ingestion, PostgreSQL storage, and a
 FastAPI query interface. Work exclusively in this repository. Do not inspect,
 copy, or modify other projects. Use English for code and documentation.
 
-The current authorized scope is **Milestone 3A: PostgreSQL schema and migration foundation**.
+Milestone 3B.1 is **ACCEPTED** after the host PostgreSQL run and final review.
+Current scope is checkpoint preparation only; Milestone 3B.2 requires approval.
 Configuration, immutable domain objects, source normalization, versioned city
 coordinates, request planning, and the synchronous HTTP client are implemented.
 The application workflow joins these components, validates full retrieval chunks,
 then retains and validates requested hours. SQLAlchemy Core tables and an initial
-offline Alembic migration define the storage contract. Database execution,
-transactional persistence, live weather calls, and API endpoints remain outside scope.
+offline Alembic migration define the storage contract. Guarded execution against
+new disposable test databases is authorized. Application persistence, live weather
+calls, and API endpoints remain outside scope.
 Obtain explicit approval before starting the next milestone. User instructions
 determine the active scope; update this section when it changes.
 
-Milestone 3A tests and migration generation remain offline. The owner authorized
-project-local SQLAlchemy/Alembic installation from the standard index and package
-compatibility review; no PostgreSQL driver is needed yet. Use project-local uv and
+Default tests and SQL generation remain offline. The owner authorized project-local
+pg8000 installation and host-assisted official PostgreSQL 18 test containers.
+The sandbox cannot access Docker's named pipe; do not retry escalation or change
+permissions. Native Psycopg was rejected by Application Control and is replaced
+by the approved pure-Python pg8000 driver. Never bypass security policy or claim
+database validation succeeded before the real host tests pass.
+Use project-local uv and
 the locked `.venv`. Keep tooling,
 caches, and temporary build environments inside this repository. Do not install or switch
 Python versions. Do not change global Python configuration, start services,
@@ -80,8 +86,15 @@ changes to semantics before changing behaviour.
   databases or substitute SQLite for PostgreSQL integration tests.
 - Define storage using SQLAlchemy Core, without replacing domain dataclasses with
   ORM models. Freeze migration operations independently of current metadata.
-- Keep migration generation connection-free. Online migration execution is
-  explicitly disabled until separately approved database integration work.
+- Keep offline migration generation connection-free. Online migrations must use
+  explicit disposable configuration, verify the database ownership marker, and
+  refuse unknown relations or populated application tables. Never accept an
+  arbitrary URL or fall back to SQLite.
+- The host runner creates a new uniquely named Compose project each time. Do not
+  reset existing volumes, perform global cleanup, or inspect/modify other projects.
+- Keep real PostgreSQL tests opt-in under `tests/integration`; report their results
+  separately from offline unit tests. The accepted 3B.1 host run passed 54 cases;
+  future results must be reported from their own execution evidence.
 - Treat coordinate and dataset configurations as immutable identities; future
   writers must reject conflicting redefinitions and preserve chunk lineage.
 - Offline SQL compilation and metadata tests do not prove database enforcement,
@@ -95,6 +108,8 @@ changes to semantics before changing behaviour.
   time, retry delays, and randomness in future ingestion tests.
 - Unit tests block socket connections and DNS resolution in `tests/conftest.py`.
   Do not remove that protection just to make a test pass.
+- Only the opt-in integration subtree overrides that fixture, allowing the exact
+  validated numeric localhost database port and rejecting other destinations/DNS.
 - Future integration tests must be explicitly selected and use a disposable
   PostgreSQL database with safeguards against non-test targets.
 - Type public interfaces. Prefer focused modules, clear errors, and explicit

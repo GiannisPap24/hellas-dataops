@@ -10,6 +10,10 @@ Milestone 2E connects planning, retrieval, normalization, retention, and validat
 in an in-memory application workflow with explicit client injection.
 Milestone 3A adds five PostgreSQL Core tables and a packaged initial Alembic
 revision, tested through offline SQL generation only.
+Milestone 3B.1 adds guarded test connections and a host-assisted PostgreSQL
+verification workflow. It is accepted after 54 real PostgreSQL 18.6 tests passed,
+including upgrade/downgrade/re-upgrade, constraints, and pg8000 transactions.
+Application persistence and recovery remain outside the completed scope.
 This document is a design contract, not a claim that the proposed pipeline is
 running.
 
@@ -220,8 +224,9 @@ migration now exist; transactions, database execution, and CLI commands do not.
 
 `storage.schema` exports SQLAlchemy Core metadata and five tables: `city_configs`,
 `datasets`, `weather_hourly`, `ingestion_runs`, and `ingestion_chunks`. Canonical
-domain dataclasses remain unchanged. There are no ORM entities, engines, sessions,
-repositories, connection settings, drivers, or transactional writers.
+domain dataclasses remain unchanged. There are no ORM entities, application sessions,
+repositories or transactional writers. The separate `storage.test_database` module
+provides explicit test-only configuration and guarded connections using pg8000.
 
 Versioned requested coordinates and provider-qualified dataset identities define
 the observation key. Weather rows reference a source chunk and must match its
@@ -236,8 +241,9 @@ is justified in this milestone.
 `storage.migration.migration_config()` locates packaged Alembic resources without
 checkout paths or credentials. Revision `20261022_0001` is an explicit frozen
 snapshot, not an import of mutable application tables. Upgrade and downgrade SQL
-compile for PostgreSQL without a driver. Online execution and configured database
-URLs are rejected before engine construction. Source archives include the root
+compile for PostgreSQL without a driver. Arbitrary database URLs are rejected.
+Online execution requires typed disposable configuration, verified server identity
+and ownership, and empty application tables. Source archives include the root
 INI; wheels include revisions, environment entry point, and the revision template.
 
 Do not use arbitrary JSON for the normalized weather query model. Bounded raw
@@ -264,10 +270,13 @@ details. These endpoints do not exist yet.
 instance, cache, dotenv discovery, logging setup, or I/O is performed on import.
 Database and source settings will be added with their consuming features.
 
-Current runtime dependencies are Pydantic, pydantic-settings, SQLAlchemy, and
-Alembic. Alembic is runtime tooling because installed distributions expose offline
+Current runtime dependencies are Pydantic, pydantic-settings, SQLAlchemy,
+Alembic, and pg8000 (pure Python). Alembic is runtime tooling because installed distributions expose offline
 migration generation. pytest, pytest-cov, and Ruff are development tools.
-FastAPI/Uvicorn and psycopg remain future dependencies, not current imports.
+FastAPI/Uvicorn remain future dependencies. Driver imports are deferred until
+explicit database access. pg8000 avoids the native Psycopg component rejected by
+Windows Application Control. Integration tests allow only their explicit test
+database port; default unit tests still block all network access.
 HTTP retrieval uses the standard library; no third-party HTTP client is needed.
 uv manages `.venv` and the resolved `uv.lock`. Development tools are a dependency
 group, not runtime requirements or a published extra. setuptools 84.2.0 is both
@@ -301,7 +310,7 @@ and do not establish live-provider or database behaviour.
 
 ## Deferred decisions
 
-- PostgreSQL version, local provisioning, and test database safeguards.
+- Successful host verification of PostgreSQL 18.6 and native driver loading.
 - Transactional write policy, raw-payload retention, and interruption detection.
 - Public demo service eligibility and repository code licence.
 - Containers, CI/CD, scheduling, cloud hosting, and additional sources.

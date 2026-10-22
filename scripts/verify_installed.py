@@ -37,6 +37,7 @@ def main() -> None:
         "hellas_dataops.storage",
         "hellas_dataops.storage.schema",
         "hellas_dataops.storage.migration",
+        "hellas_dataops.storage.test_database",
         "hellas_dataops.storage.migrations",
         "hellas_dataops.storage.migrations.versions",
         "hellas_dataops.api",
@@ -46,6 +47,12 @@ def main() -> None:
         "pydantic_core",
         "sqlalchemy",
         "alembic",
+        "pg8000",
+        "pg8000.dbapi",
+        "scramp",
+        "asn1crypto",
+        "dateutil",
+        "six",
     )
     for name in modules:
         module = importlib.import_module(name)
@@ -54,6 +61,11 @@ def main() -> None:
             raise RuntimeError(f"{name} was imported outside this environment")
 
     distribution = importlib.metadata.distribution("hellas-dataops")
+    # Dialect construction imports the selected DBAPI without opening a connection.
+    from sqlalchemy.dialects.postgresql.pg8000 import PGDialect_pg8000
+
+    if PGDialect_pg8000(dbapi=PGDialect_pg8000.import_dbapi()).driver != "pg8000":
+        raise RuntimeError("Installed PostgreSQL dialect mismatch")
     direct_url = json.loads(distribution.read_text("direct_url.json") or "{}")
     if direct_url.get("dir_info", {}).get("editable", False):
         raise RuntimeError("Distribution verification must not use an editable install")

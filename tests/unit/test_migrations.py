@@ -89,7 +89,10 @@ def test_checkout_ini_and_packaged_configuration_generate_the_same_sql():
 
 
 def test_online_migration_is_explicitly_disabled_before_connection():
-    with pytest.raises(CommandError, match="Online migrations are disabled"):
+    with pytest.raises(
+        CommandError,
+        match="Online migrations require explicit disposable test configuration",
+    ):
         command.upgrade(migration_config(), "head")
 
 

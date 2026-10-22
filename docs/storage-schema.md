@@ -1,8 +1,11 @@
 # PostgreSQL storage contract
 
-Milestone 3A defines schema and migrations only. No SQL has been executed against
-PostgreSQL. Metadata tests and SQL compilation are not evidence of constraint
-enforcement, successful migrations, rollback, concurrency, or persistence.
+Milestone 3A established the schema and migration through offline checks.
+Milestone 3B.1 is now accepted after 54 tests passed against disposable PostgreSQL
+18.6: migration lifecycle, catalog agreement, covered constraints, and rollback
+were verified. Application persistence and concurrency remain future work.
+The initial revision SQL is unchanged. See the
+[acceptance record](development.md#milestone-3b1-final-acceptance).
 
 ## Tables and identity
 
@@ -129,14 +132,17 @@ engine. Changes after a released checkpoint require a new reviewed migration.
 
 The packaged `storage.migration.migration_config(output_buffer=None)` supports
 installed distributions without a checkout. Root `alembic.ini` points to the same
-packaged scripts. Online execution is deliberately disabled; providing a database
-URL also fails clearly without exposing its value. `upgrade head --sql` and
+packaged scripts. Generic online CLI commands and database URLs fail clearly
+without exposing values. `migrate_test_database(target, downgrade=False)` permits
+online execution only after typed configuration, server identity/ownership, and
+empty-database checks. `upgrade head --sql` and
 `downgrade 20261022_0001:base --sql` only emit PostgreSQL SQL. The downgrade drops
 weather, chunks, runs, datasets, and cities in dependency order; it is destructive
-if a future operator actually executes it. No rollback has been performed.
+when executed. The accepted host fixture performed this downgrade on its empty
+disposable database, verified the empty Alembic version table, then re-upgraded.
 
-Milestone 3B must test on disposable PostgreSQL, with explicit opt-in and target
-safeguards. In addition to server enforcement of all checks and foreign keys,
+Further database tests must use disposable PostgreSQL, explicit opt-in and target
+safeguards. Beyond the covered server constraints and foreign keys,
 future transactional code must validate rules that this row-level schema does not:
 
 - Chunk intervals and JSON provenance agree with the parent run and request.
@@ -146,6 +152,8 @@ future transactional code must validate rules that this row-level schema does no
 - Idempotent writes, chunk completion, and failure/recovery state commit atomically.
 - Conflicting concurrent writes have a deliberate, tested outcome.
 
-No PostgreSQL driver is required to define metadata or emit offline SQL. Psycopg 3
-is deferred; installation choice, server version, and provisioning require the
-separate 3B approval.
+No PostgreSQL driver import is required to define metadata or emit offline SQL.
+pg8000 1.31.5 is selected for integration testing after Application Control blocked
+Psycopg's native library. Driver imports, dialect construction, and the covered
+real PostgreSQL behavior pass. The host runner verifies driver loading
+before creating Docker resources. See [PostgreSQL testing](postgres-testing.md).

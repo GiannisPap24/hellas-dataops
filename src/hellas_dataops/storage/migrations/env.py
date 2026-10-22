@@ -1,4 +1,4 @@
-"""Alembic execution entry point; deliberately supports offline SQL only."""
+"""Alembic entry point: offline SQL or explicitly guarded test-database execution."""
 
 from alembic import context
 
