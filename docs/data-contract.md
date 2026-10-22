@@ -597,7 +597,9 @@ timezone, unit, or missing-array defaults.
 - Future persistence must ensure a structurally invalid chunk writes no
   normalized weather records. A valid
   chunk containing nulls can be stored, but must report incomplete measurements
-  rather than claim full completeness.
+  rather than claim full completeness. Milestone 3B.2 validates retained coverage
+  before connecting and preserves nulls; write counts describe rows, not complete
+  non-null measurements.
 
 UTC requests avoid Greek daylight-saving ambiguity. Do not interpret UTC dates
 as local Greek calendar days. Local-day aggregation is deferred.
@@ -628,7 +630,8 @@ refetching the same URL or possessing a checksum.
 The planner retains immutable request intent and canonical JSON; the normalizer
 retains canonical identity and returned location/timezone metadata separately.
 The source pipeline now pairs request intent with validated returned metadata per
-chunk. Durable storage and complete retrieval provenance remain future requirements.
+chunk. Milestone 3B.2 stores request/grid provenance and explicit retrieval times;
+complete HTTP response retention remains a future requirement.
 Preserve, without credentials:
 
 - Provider, endpoint, explicit model, and dataset/contract version.
@@ -668,9 +671,23 @@ is the planner's version, not this document's revision number.
 Milestone 3B.1 adds guarded online test migrations and opt-in real PostgreSQL
 tests. The accepted host run passed 54 tests on PostgreSQL 18.6, including covered
 constraints, upgrade/downgrade/re-upgrade, and UTC instant round trips. Idempotent
-writes, configuration immutability, cross-row interval agreement, and recovery
-remain future application responsibilities in 3B.2. No canonical domain or source
+writes, configuration immutability and cross-row interval agreement now have
+3B.2 implementation and passing host tests. Automated recovery remains future
+work. No canonical domain or source
 interface changed. See [the host procedure](postgres-testing.md).
+
+### Chunk write contract (Milestone 3B.2, accepted)
+
+The [persistence contract](persistence.md) defines explicit `RunPlan`, `ChunkWrite`
+and `WritePolicy` inputs. Each retained chunk is atomic. All four measurements are
+compared exactly, including nulls; metadata changes alone do not rewrite weather.
+Default writes reject changed values. Explicit replacement requires a new run
+and strictly newer retrieval time, retaining previous values and lineage in the
+chunk's versioned JSON receipt. Exact completed-chunk replays make no data changes.
+Counts and the canonical input digest describe this storage operation, not a raw
+response checksum or proof of ERA5 delivery. The host-assisted 3B.2 run passed
+83 cases, including 29 persistence cases. Guarantees are limited to the reviewed
+implementation and tested scenarios; see [acceptance and limits](development.md#milestone-3b2-final-acceptance).
 
 ## Usage terms and data licence
 

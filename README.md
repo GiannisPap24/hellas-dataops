@@ -10,8 +10,12 @@ deterministic testing, and measurable performance.
 
 ## Current status
 
-**Milestone 3B.1 ACCEPTED: 54 real PostgreSQL tests and 699 offline tests pass.** This is an early scaffold,
-not a running weather platform.
+**Milestone 3B.2 ACCEPTED: 83 real PostgreSQL tests and 750 offline tests pass.**
+Transactional chunk persistence, replay, correction and tested writer contention
+are verified on PostgreSQL 18.6. An operational ingestion command and API are still
+planned; this is not a running weather platform. See the
+[persistence contract](docs/persistence.md) and
+[acceptance evidence](docs/development.md#milestone-3b2-final-acceptance).
 
 Implemented:
 
@@ -34,11 +38,13 @@ Implemented:
 - A guarded host-assisted PostgreSQL test workflow, isolated Compose configuration,
   and opt-in database tests, verified on PostgreSQL 18.6 with pg8000 1.31.5.
 - Architecture, data, safety, and contribution instructions.
+- Explicit domain/storage mapping, atomic chunk writes, unchanged replay, and
+  opt-in corrections with prior-value lineage, verified against PostgreSQL.
 - A uv-managed local environment and resolved dependency lockfile.
 - Verified linting, formatting, coverage, and source/wheel packaging on Windows.
 
-Not yet implemented: persistent weather ingestion, retries/recovery, CLI commands,
-application database writes, API endpoints, logging configuration, orchestration,
+Not yet implemented: an end-to-end persistent ingestion command, automated
+retries/recovery, CLI commands, API endpoints, logging configuration, orchestration,
 CI/CD, dashboards, or deployment. No live weather data has been fetched.
 
 ## Intended data scope
@@ -67,7 +73,7 @@ Open-Meteo on each request.
 | `domain` | Immutable weather objects and pure validation | Implemented |
 | `sources` | Request planning, HTTP retrieval, response parsing | ERA5 planning, bounded HTTP client, pure normalization; verified offline |
 | `ingestion` | Application workflow and future ingestion lifecycle | Source collection and retention implemented; persistence/recovery deferred |
-| `storage` | PostgreSQL schema and future queries/transactions | Core metadata, offline/guarded online migrations, real PostgreSQL constraint verification; application persistence deferred |
+| `storage` | PostgreSQL schema, mapping and transactions | Accepted schema/migrations and transactional chunk persistence |
 | `api/routes` | FastAPI query endpoints | Reserved package |
 
 See [architecture decisions](docs/architecture.md). CLI and observability modules
@@ -322,7 +328,7 @@ restricted to the explicit disposable-test API used by the host verification scr
 See [development verification](docs/development.md#milestone-3a-schema-and-migration-foundation)
 for dependency versions, migration checks, and fresh distribution installations.
 
-For Milestone 3B.1, open ordinary Windows PowerShell in the repository root and run:
+For Milestone 3B.2 verification, open ordinary Windows PowerShell in the repository root and run:
 
 ```powershell
 & .\scripts\verify-postgres.ps1
@@ -332,7 +338,9 @@ This creates a new isolated PostgreSQL test environment only after preflight,
 runs migration lifecycle and constraint tests, and writes a sanitized report under
 `artifacts/postgres/`. It never deletes volumes or touches other projects. Read
 [PostgreSQL testing](docs/postgres-testing.md) before execution, including driver
-policy failures and retained-resource limits. No real database result is claimed yet.
+policy failures and retained-resource limits. The 3B.2 database result is accepted.
+After creating its checkpoint, the runner's frozen HEAD gate requires review in
+the next authorized milestone before another database run.
 
 | Environment variable | Default | Accepted values |
 | --- | --- | --- |
@@ -364,7 +372,7 @@ or environment dumps; structured validation errors may still contain inputs.
 | 2E | In-memory source pipeline, retained-hour filtering, complete coverage, chunk provenance | Implemented and verified offline; no persistence |
 | 3A | PostgreSQL Core schema, constraints, initial offline Alembic migration | Implemented and verified offline; no database execution |
 | 3B.1 | Disposable PostgreSQL, guarded migrations, real constraint tests | ACCEPTED: 54 PostgreSQL tests and 699 offline tests pass |
-| 3B.2 | Transactional idempotent writes and failure recovery | Deferred; separate approval required |
+| 3B.2 | Transactional idempotent writes and rollback | ACCEPTED: 83 PostgreSQL tests and 750 offline tests pass |
 | 4 | CLI ingestion, idempotency, backfills, run tracking, recovery | Planned |
 | 5 | Bounded FastAPI query endpoints and API tests | Planned |
 | 6 | Controlled end-to-end demonstration, benchmarks, runbook, portfolio evidence | Planned |

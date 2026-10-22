@@ -38,6 +38,8 @@ def main() -> None:
         "hellas_dataops.storage.schema",
         "hellas_dataops.storage.migration",
         "hellas_dataops.storage.test_database",
+        "hellas_dataops.storage.mapping",
+        "hellas_dataops.storage.persistence",
         "hellas_dataops.storage.migrations",
         "hellas_dataops.storage.migrations.versions",
         "hellas_dataops.api",

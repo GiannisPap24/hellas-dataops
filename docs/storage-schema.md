@@ -3,7 +3,9 @@
 Milestone 3A established the schema and migration through offline checks.
 Milestone 3B.1 is now accepted after 54 tests passed against disposable PostgreSQL
 18.6: migration lifecycle, catalog agreement, covered constraints, and rollback
-were verified. Application persistence and concurrency remain future work.
+were verified. Milestone 3B.2 is also accepted: all 83 database tests pass,
+including 29 persistence cases covering writes, replay, correction, rollback/retry
+and cooperating concurrent writers. See [the write contract](persistence.md).
 The initial revision SQL is unchanged. See the
 [acceptance record](development.md#milestone-3b1-final-acceptance).
 
@@ -18,14 +20,14 @@ The initial revision SQL is unchanged. See the
 | `weather_hourly` | `(city_config_id, dataset_key, timestamp_utc)` | Foreign keys to city/dataset, source chunk, and matching run identity |
 
 Surrogate configuration keys keep observation indexes compact. They do not
-replace public identifiers. The future mapper resolves the existing canonical
+replace public identifiers. The mapper resolves the existing canonical
 `DatasetIdentity(provider_id, dataset_id)` and the city configuration's
 `(city_id, coordinate_version)`
 to these keys. No configuration data is seeded in the migration.
 
 The city registry remains authoritative for the five approved cities. A new
 coordinate configuration version creates a new `city_configs` row and therefore
-a distinct weather series. The future writer must reject reusing an existing
+a distinct weather series. The writer rejects reusing an existing
 city/version with different coordinates. Dataset model, units, and source contract
 version likewise must not be changed in place for an existing provider/dataset
 identity; incompatible semantics require a new dataset ID. These are immutable
@@ -67,17 +69,17 @@ requested hours exist.
 ## Provenance and operational state
 
 The run identifies one city configuration, dataset, and original half-open
-requested interval. UUID and creation time are explicit future application inputs;
+requested interval. UUID and creation time are explicit application inputs;
 there is no database clock, UUID extension, or hidden source identity default.
 
 Each chunk stores the complete-day retrieval interval and retained half-open
 subset. Retrieval is nonempty and at most 336 hours; retained hours are nonempty
 and contained within retrieval. `request_provenance` is a required JSONB object
-holding the planner's canonical request representation: endpoint, parameters,
+holding a versioned envelope around the planner's canonical request: endpoint, parameters,
 selected model, versioned coordinates, units, variables, and requested dates.
-JSONB preserves semantic content, not original JSON whitespace/key order. Future
-mapping must parse the planner's JSON string into an object rather than store it
-as a JSON string value.
+JSONB preserves semantic content, not original JSON whitespace/key order. Mapping
+parses the planner's JSON into the `request` object, alongside `storage_contract`,
+`policy`, and, after success, a `receipt`. See [its contents](persistence.md#provenance).
 
 Returned `grid_latitude`, `grid_longitude`, optional `grid_elevation_m`,
 `source_timezone`, `utc_offset_seconds`, and optional `timezone_abbreviation`
@@ -90,7 +92,8 @@ records intent, not independent proof that a response contains ERA5 data.
 Statuses are limited to `planned`, `running`, `succeeded`, and `failed`; only
 status defaults to `planned`. A finished run requires `finished_at >= created_at`
 and a terminal status, and conversely terminal status requires a finish time.
-No execution, retries, state-transition engine, or recovery policy is implemented.
+Chunk writes now maintain these statuses atomically; retries, a general
+state-transition engine and an automatic recovery policy remain unimplemented.
 Separate attempt/event history, response checksums, raw-body retention, and error
 payload storage are deferred until they have concrete consumers and privacy rules.
 
@@ -98,9 +101,10 @@ Every weather row references a source `(run_id, chunk_index)`. A second composit
 foreign key binds that source run to the weather row's city configuration and
 dataset. All foreign keys use PostgreSQL's default NO ACTION semantics; deleting
 provenance must not cascade into silent weather deletion. A weather row tracks
-one source chunk, not a complete history of every value ever supplied. Replay,
-correction, unchanged-row lineage, and audit retention policies need explicit 3B
-tests before a writer is introduced.
+one value-origin chunk. Correction receipts preserve previous measurements and
+source pointers; unchanged writes preserve the existing row's lineage. The 3B.2
+host tests verify these application rules. The history remains application-owned
+JSON rather than a tamper-proof or database-enforced audit log.
 
 ## Indexes and naming
 

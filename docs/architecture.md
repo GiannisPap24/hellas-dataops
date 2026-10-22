@@ -13,7 +13,13 @@ revision, tested through offline SQL generation only.
 Milestone 3B.1 adds guarded test connections and a host-assisted PostgreSQL
 verification workflow. It is accepted after 54 real PostgreSQL 18.6 tests passed,
 including upgrade/downgrade/re-upgrade, constraints, and pg8000 transactions.
-Application persistence and recovery remain outside the completed scope.
+Milestone 3B.2 adds explicit mapping and transactional chunk persistence in
+`storage.mapping` and `storage.persistence`, accepted after 83 real PostgreSQL
+tests and 750 offline tests. This verifies the tested chunk and writer scenarios,
+not arbitrary crash recovery or an operational ingestion command.
+The storage service owns transactions; source retrieval stays outside them.
+See [persistence contracts](persistence.md) for locking, replay, correction and
+provenance decisions. Automated recovery remains unimplemented.
 This document is a design contract, not a claim that the proposed pipeline is
 running.
 

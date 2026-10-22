@@ -12,7 +12,7 @@ from pathlib import Path
 
 from hellas_dataops.storage.test_database import TestDatabaseConfig
 
-BASELINE = "6a0439522cd9d1bd17005850a5b718730ef44c28"
+BASELINE = "779313504a658ea5e7768c5e98f420944d47e4ea"
 IMAGE = "postgres:18.6-bookworm"
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -113,34 +113,25 @@ def main() -> int:
     try:
         report["working_tree"] = verify_repository()
         report["checkpoint"] = BASELINE
-        # Deliberate 3B.1 edits are expected, but unrelated edits must be reviewed.
+        # Reviewed 3B.2 changes only; the accepted schema and dependencies are frozen.
         allowed = {
             "AGENTS.md",
             "README.md",
-            "MANIFEST.in",
-            "pyproject.toml",
-            "uv.lock",
-            "alembic.ini",
-            "compose.postgres-test.yaml",
             "tests/conftest.py",
-            "tests/unit/test_migrations.py",
-            "tests/unit/test_test_database.py",
             "tests/unit/test_postgres_runner.py",
-            "tests/unit/test_pg8000.py",
-            "tests/integration/conftest.py",
-            "tests/integration/test_postgres.py",
+            "tests/unit/test_persistence.py",
+            "tests/unit/test_persistence_mapping.py",
+            "tests/integration/test_persistence.py",
             "docs/architecture.md",
             "docs/data-contract.md",
             "docs/development.md",
             "docs/storage-schema.md",
             "docs/postgres-testing.md",
-            "scripts/verify-postgres.ps1",
+            "docs/persistence.md",
             "scripts/verify_postgres.py",
-            "scripts/verify_distributions.py",
             "scripts/verify_installed.py",
-            "src/hellas_dataops/storage/test_database.py",
-            "src/hellas_dataops/storage/migration.py",
-            "src/hellas_dataops/storage/migrations/env.py",
+            "src/hellas_dataops/storage/mapping.py",
+            "src/hellas_dataops/storage/persistence.py",
         }
         if any(
             line.split(" ", 1)[-1] not in allowed or line.startswith(("D ", "R ", "C "))

@@ -958,3 +958,275 @@ milestone rather than bypassing it. Recommended 3B.2 scope: explicit domain/stor
 mappings, idempotent transactional chunk writes, correction/lineage policy, atomic
 completion, concurrency, and injected failure/recovery tests on disposable
 PostgreSQL. No live weather calls, API endpoints, or deployment are implied.
+
+## Milestone 3B.2 implementation record (before host acceptance)
+
+This section records the earlier offline implementation handoff. Its pending-host
+statements are superseded by the final acceptance record below.
+
+Baseline verified on 2026-10-22: main at
+`779313504a658ea5e7768c5e98f420944d47e4ea`, initially clean. The accepted host
+3B.1 report remains historical evidence: 54 PostgreSQL tests, server 18.6,
+pg8000 1.31.5, pytest exit code zero. No new Docker access was attempted from
+Codex; its named-pipe restriction remains in force.
+
+New `storage.mapping` and `storage.persistence` modules implement the
+[chunk write contract](persistence.md). No dependency, schema, migration, domain,
+source adapter or source-pipeline changes are made. Python remains 3.14.4,
+SQLAlchemy 2.1.6, Alembic 1.20.0, pg8000 1.31.5 and project-local uv 0.13.4.
+
+The offline suite passed **750 tests** (699 regressions plus 51 new tests), with
+the network guard intact. Mapping coverage is **82/82 statements, 22/22 branches**.
+Persistence orchestration coverage offline is **51/95 statements, 18/38 branches**,
+51.88% combined. Missing paths are primarily actual run/chunk/weather SQL writes;
+they belong to the pending PostgreSQL run, not an in-memory database substitute.
+Overall package coverage is **795/839 statements, 258/278 branches**, 94.27%
+combined. Previously accepted runtime modules retain full offline coverage.
+
+An initial invocation without the project-local TEMP/TMP settings produced five
+existing temporary-directory fixture errors (740 tests passed). Re-running with
+the documented settings below resolved them without changing tests or policies.
+
+The opt-in suite **collects 83 tests: 54 accepted schema/driver cases and 29 new
+persistence cases**. Collection is not execution. None of the new database cases
+has run in Codex. They exercise committed writes, mixed counts, overlapping
+intervals, corrections/NULLs, lineage, input drift, rollback/retry, full chunk
+plans, independent city series and concurrent writers with an observed server
+lock wait. The unchanged session migration lifecycle runs before these cases.
+
+Commands used from the project root:
+
+```powershell
+$env:UV_CACHE_DIR = Join-Path $PWD '.uv-cache'
+$env:UV_PYTHON_DOWNLOADS = 'never'
+$env:UV_LINK_MODE = 'copy'
+$env:TEMP = Join-Path $PWD '.tools/tmp'
+$env:TMP = $env:TEMP
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = '1'
+& ./.venv/Scripts/python.exe -I -B -m pytest -p no:cacheprovider -p pytest_cov --cov=src/hellas_dataops --cov-report=term-missing --cov-report=json:artifacts/coverage-3b2-offline.json -q
+& ./.venv/Scripts/ruff.exe check .
+& ./.venv/Scripts/ruff.exe format --check .
+& ./.tools/uv/bin/uv.exe lock --check --offline
+& ./.tools/uv/bin/uv.exe pip check --offline --python .venv/Scripts/python.exe
+& ./.venv/Scripts/python.exe -I -B -m pytest -p no:cacheprovider tests/integration --postgres-config .tools/not-executed.json --collect-only -q
+```
+
+The last command deliberately performs collection only and never reads a test
+target or connects to a database. The real host command is:
+
+```powershell
+& .\scripts\verify-postgres.ps1
+```
+
+The runner's frozen HEAD gate now uses the reviewed 3B.1 commit. Its permitted
+changes are limited to 3B.2 paths; schema/migration/dependency modifications fail
+preflight. Existing resource isolation, localhost binding, driver preflight,
+bounded startup, sanitized reports and non-destructive resource retention remain.
+Do not reuse the older checkpoint script for this milestone or commit these
+changes without separate authorization.
+
+Distribution verification commands (use the `Invoke-Checked` helper above to
+stop immediately on any failed command):
+
+```powershell
+Invoke-Checked ./.tools/uv/bin/uv.exe build --offline --no-build-isolation --python .venv/Scripts/python.exe --out-dir dist/milestone-3b2
+Invoke-Checked ./.venv/Scripts/python.exe -I -B scripts/verify_distributions.py dist/milestone-3b2
+Invoke-Checked ./.tools/uv/bin/uv.exe export --locked --offline --no-dev --no-emit-project --format requirements.txt --output-file .tools/runtime-requirements-3b2.txt | Out-Null
+foreach ($kind in @('wheel', 'sdist')) {
+    $envPath = ".tools/$kind-check-3b2-verified"
+    if (Test-Path $envPath) { throw 'Use a fresh verification directory' }
+    Invoke-Checked ./.tools/uv/bin/uv.exe venv $envPath --python .venv/Scripts/python.exe --no-managed-python --offline
+    $checkPython = "$envPath/Scripts/python.exe"
+    Invoke-Checked $checkPython -I -B -c "import importlib.util as u; assert all(u.find_spec(n) is None for n in ['hellas_dataops','pg8000','sqlalchemy','alembic'])"
+    Invoke-Checked ./.tools/uv/bin/uv.exe pip sync --python $checkPython --offline --require-hashes .tools/runtime-requirements-3b2.txt
+    $package = if ($kind -eq 'wheel') { 'dist/milestone-3b2/hellas_dataops-0.1.0.dev0-py3-none-any.whl' } else { 'dist/milestone-3b2/hellas_dataops-0.1.0.dev0.tar.gz' }
+    Invoke-Checked ./.tools/uv/bin/uv.exe pip install --python $checkPython --offline --no-deps $package
+    Invoke-Checked $checkPython -I -B scripts/verify_installed.py
+    Invoke-Checked ./.tools/uv/bin/uv.exe pip check --offline --python $checkPython
+}
+```
+
+Acceptance remains pending the new sanitized host report, actual database test
+counts and targeted coverage. Remaining limitations include broad per-city locking,
+no whole-run transaction/deadline, ambiguous network failure during commit, no
+automatic recovery and no production connection configuration. No live weather
+requests, commits, pushes or next-milestone work are part of this change.
+
+## Milestone 3B.2 final acceptance
+
+**MILESTONE 3B.2: ACCEPTED** following the 2026-10-22 host evidence review and
+fresh offline checks. Acceptance covers transactional chunk persistence and the
+tested cooperating-writer scenarios, not a live or production ingestion platform.
+No runtime, schema, migration or dependency changes were needed during this review.
+
+### Real PostgreSQL evidence
+
+The exact ignored local evidence directory is
+`artifacts/postgres/hellas-dataops-test-309003857997/`:
+
+- `report.json`: `status=passed`, `stage=complete`, `pytest_exit_code=0`.
+- `pytest.txt`: **83 passed in 14.53 seconds**, no failures/skips/errors reported.
+- `coverage.json`: targeted storage execution recorded on the real database run.
+- Baseline: main at `779313504a658ea5e7768c5e98f420944d47e4ea`.
+- PostgreSQL **18.6 (Debian 18.6-1.pgdg12+2)**; image `postgres:18.6-bookworm`.
+- Image ID: `sha256:bbf83594798e144bff365a9c191c5d779f181fb3135902064ab8ff11918020fc`.
+- Driver **pg8000 1.31.5**, dialect `postgresql+pg8000`; SQLAlchemy **2.1.6**,
+  Alembic **1.20.0**, Python **3.14.4**. Docker Server **29.7.2**, Compose **5.4.0**.
+
+Evidence SHA-256 values, recorded without credentials:
+
+| File | SHA-256 |
+| --- | --- |
+| report.json | 66098e2c40fcc75b414d3c74f98599c82691dcd5c4fc10ff7491aa65f8a98506 |
+| pytest.txt | f383671a4a41ac2d106e223407262fcbdda62d81f53c1b8ec84e49b2f8164dca |
+| coverage.json | 1c3dae19cf5e055bf26e30a71d77b6aa71be66c1b2698af4bc61096e60cae906 |
+
+The 83 cases comprise **54 existing schema/driver tests + 29 persistence tests**.
+The reviewed runner executes the real integration subtree, not mocks or SQLite.
+Its successful path requires Docker Linux Server access, resource ownership and
+health checks, the exact loopback port **127.0.0.1:49326**, database/user
+`hellas_dataops_test`, PostgreSQL major version 18 and the secret ownership marker.
+Container, network and volume names use only the reported unique project prefix.
+The session fixture checks a fresh database, upgrade to `20261022_0001`, downgrade
+to base, re-upgrade, and final revision/empty application tables after test cleanup.
+Passing teardown is included in the zero pytest exit code.
+
+The runner's completed path returns zero. The report explicitly records pytest's
+exit code; it does not contain a separate shell-process exit-code field. This
+distinction does not change the successful evidence from the wrapper and tests.
+The report is local execution evidence, not a signed build attestation. The
+pre-review distributions matched all current source/test files byte-for-byte.
+
+No command in the reviewed workflow modifies unrelated Docker resources. No
+Docker operations were performed in this acceptance review. The evidence is not
+a Docker-wide before/after inventory and does not establish what independent
+processes did. Containers/volumes from the host run remain retained; none were
+deleted. EREN or any other project was not accessed by this review.
+
+### Demonstrated persistence guarantees and limits
+
+- One transaction covers identities, run/chunk plan, weather, receipt and status.
+  A return value is delivered only after successful context-manager commit.
+- Identical completed-chunk replay leaves snapshots unchanged; new-run equal
+  values keep original weather lineage. Grid-only changes do not rewrite weather.
+- Default changed-value writes fail atomically. Explicit replacement requires a
+  newer retrieval time; correction receipts preserve prior values and lineage,
+  including NULL transitions. An old replay cannot undo a later correction.
+- Exact mixed insert/update/unchanged counts and partial overlaps passed.
+- A conflict after an earlier insert rolls back the entire chunk. An injected
+  later-chunk failure preserves earlier committed chunks; retry succeeds after
+  removing that fault. This is manual retry evidence, not automated recovery.
+- City-configuration locks, then run/weather locks under READ COMMITTED, serialize
+  cooperating writers. Four two-connection cases observe a real PostgreSQL lock
+  wait and verify unchanged replay, conflict rejection or stale-refresh rejection.
+- Out-of-order completion, 1/168/336/360-hour requests and five distinct city
+  series pass. The 336-hour fixture starts at 05:00 UTC and therefore spans two
+  provider calendar-day chunks; it is not a midnight-aligned single-chunk test.
+
+HTTP retrieval is outside storage transactions. Canonical domain, source pipeline,
+accepted schema, initial migration and dependency files are unchanged from HEAD.
+Arbitrary SQL writers can bypass application policies. Row locking is broader
+than an interval lock and serializes disjoint writes for the same city/version.
+Freshness compares the current value origin, not every later unchanged retrieval.
+No whole-run atomicity, process-crash test, lost-commit-acknowledgement test,
+automatic retry/recovery, throughput benchmark or whole-operation deadline is
+claimed. Production credentials/roles/TLS and non-disposable connections remain
+out of scope. These are nonblocking limits for the accepted milestone.
+
+### Coverage and quality
+
+| Scope | Statements | Branches | Combined coverage |
+| --- | --- | --- | --- |
+| Host storage suite | 295/326 (90.49%) | 67/90 (74.44%) | 87.02% |
+| Host persistence module | 89/95 (93.68%) | 32/38 (84.21%) | 90.98% |
+| Fresh offline full package | 795/839 (94.76%) | 258/278 (92.81%) | 94.27% |
+| Offline mapping module | 82/82 | 22/22 | 100% |
+| Union of host/offline storage coverage | 325/326 | 89/90 | 99.52% |
+
+The union is a line/branch-set calculation from the two JSON reports, not a new
+combined test run. Most host gaps are intentionally offline input/configuration
+rejections and offline SQL generation. The remaining unexecuted persistence path
+rejects an externally inconsistent run/chunk status (`chunk_state`, line 173 in
+the reviewed source). Normal service transitions do not produce that state. It is
+a documented nonblocking defensive-test gap, not evidence of complete coverage.
+
+Fresh verification: **750 offline tests passed in 2.69 seconds**, comprising 699
+existing cases and 51 added in 3B.2; network blocking remained enabled. Ruff lint
+and formatting passed (60 Python files), offline uv lock verification passed, and
+all 28 installed development packages are compatible. The lockfile is unchanged.
+Commands are those in the implementation record above, with acceptance coverage
+written to `artifacts/coverage-3b2-acceptance-offline.json`. Build the reviewed
+documentation with `uv build --offline --no-build-isolation --python
+.venv/Scripts/python.exe --out-dir dist/milestone-3b2-accepted`, then run
+`python -I -B scripts/verify_distributions.py dist/milestone-3b2-accepted` using the
+documented project-local executables and temporary/cache settings.
+
+### Exact milestone inventory and checkpoint
+
+Created (6):
+
+- `docs/persistence.md`
+- `src/hellas_dataops/storage/mapping.py`
+- `src/hellas_dataops/storage/persistence.py`
+- `tests/integration/test_persistence.py`
+- `tests/unit/test_persistence.py`
+- `tests/unit/test_persistence_mapping.py`
+
+Modified (10):
+
+- `AGENTS.md`
+- `README.md`
+- `docs/architecture.md`
+- `docs/data-contract.md`
+- `docs/development.md`
+- `docs/postgres-testing.md`
+- `docs/storage-schema.md`
+- `scripts/verify_installed.py`
+- `scripts/verify_postgres.py`
+- `tests/conftest.py`
+
+The acceptance review updates only the eight instruction/documentation files in
+that inventory; runtime code and tests retain the host-verified content. All 73
+candidate repository files were checked for accidental credentials, personal
+information, absolute user paths, private infrastructure and generated artifacts.
+No blocking finding was identified. Synthetic fixtures, the lockfile and packaging
+inputs remain included; secrets, environments, reports and distributions remain
+ignored. Pattern scanning is a review aid, not a proof of absence of all secrets.
+
+Git metadata is read-only in this Codex workspace. No Git write or escalation is
+attempted. The ignored `artifacts/checkpoint-3b2.ps1` and hash-bound manifest prepare
+one local checkpoint, checking main/HEAD, all reviewed file hashes, the exact
+16-file change inventory, approved noreply author/committer, hooks and staged
+blob identities before commit. They do not change identity/configuration or push.
+
+Run once from normal PowerShell:
+
+```powershell
+& .\artifacts\checkpoint-3b2.ps1
+```
+
+The expected commit message is
+`feat: add transactional idempotent PostgreSQL persistence`. Stop on any failed
+guard; obtain a fresh review rather than editing the manifest or broadening staging.
+After committing, the PostgreSQL runner's frozen baseline deliberately requires
+review during the next authorized milestone. Do not rerun an older checkpoint.
+
+### Recommended next milestone (not started)
+
+Recommend **Milestone 3C.1: sequential operational ingestion and explicit resume**:
+one small command/application coordinator joining existing planning, injected
+retrieval, full normalization, retention and `persist_chunk`; explicit run UUID,
+UTC interval, policy and safe status/count output. Test an interrupted later chunk,
+restart with the same plan, skip validated completed chunks and finish remaining
+ones without changing prior lineage. Define how canonical input/retrieval metadata
+is retained for an ambiguous commit; do not silently reconstruct a different input
+under a completed chunk identity. Use synthetic transport and the disposable
+PostgreSQL target initially. No scheduler, worker queue or new schema by default.
+
+After that, the remaining MVP work is a separately authorized bounded live-source
+smoke test after usage-term review, intentional operational database configuration,
+five-city 2025 backfills, and bounded read-only FastAPI endpoints with documentation
+and tests. Basic structured run diagnostics and failure handling are MVP needs.
+Scheduling, dashboards, cloud deployment, additional sources, distributed workers
+and high-volume performance tuning remain optional enhancements. No next-milestone
+implementation is authorized by this acceptance record.

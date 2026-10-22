@@ -7,15 +7,18 @@ monolith for reliable historical weather ingestion, PostgreSQL storage, and a
 FastAPI query interface. Work exclusively in this repository. Do not inspect,
 copy, or modify other projects. Use English for code and documentation.
 
-Milestone 3B.1 is **ACCEPTED** after the host PostgreSQL run and final review.
-Current scope is checkpoint preparation only; Milestone 3B.2 requires approval.
+Milestone 3B.2 is **ACCEPTED** after 83 host PostgreSQL tests and 750 offline tests.
+Current authorized scope is final acceptance documentation and one reviewed local
+Git checkpoint only. Do not push or begin the next milestone without approval.
 Configuration, immutable domain objects, source normalization, versioned city
 coordinates, request planning, and the synchronous HTTP client are implemented.
 The application workflow joins these components, validates full retrieval chunks,
 then retains and validates requested hours. SQLAlchemy Core tables and an initial
 offline Alembic migration define the storage contract. Guarded execution against
-new disposable test databases is authorized. Application persistence, live weather
-calls, and API endpoints remain outside scope.
+new disposable test databases is authorized. Persistence uses SQLAlchemy Core and
+pg8000 without changing the accepted schema. Live weather calls and API endpoints
+remain outside scope. See the final 3B.2 acceptance record in docs/development.md
+for demonstrated guarantees, coverage gaps and operational limitations.
 Obtain explicit approval before starting the next milestone. User instructions
 determine the active scope; update this section when it changes.
 

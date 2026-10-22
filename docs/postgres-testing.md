@@ -1,4 +1,4 @@
-# Host-assisted PostgreSQL verification (Milestone 3B.1)
+# Host-assisted PostgreSQL verification
 
 Status: **Milestone 3B.1 ACCEPTED**, based on the owner-host run of 54 passing
 PostgreSQL tests and final review on 2026-10-22. Codex
@@ -7,6 +7,11 @@ driver now imports successfully, replacing Psycopg's blocked native component.
 No security policy was changed. Upgrade/downgrade/re-upgrade and the covered
 constraint cases passed on PostgreSQL 18.6. See the
 [acceptance record](development.md#milestone-3b1-final-acceptance).
+
+**Milestone 3B.2 is also ACCEPTED:** its host run passed all 83 database tests,
+including 29 committed persistence, replay, correction and concurrency cases.
+See [the persistence contract](persistence.md) and
+[final acceptance evidence](development.md#milestone-3b2-final-acceptance).
 
 ## One host command
 
@@ -42,8 +47,8 @@ PostgreSQL 18.6 with 54 passing tests. Alembic uses the existing
 SQLAlchemy connection and needs no driver-specific migration changes.
 
 Use Windows x64 / CPython 3.14.4 with the existing local uv 0.13.4 and locked
-environment. The script verifies the main branch and committed 3A checkpoint
-`6a0439522cd9d1bd17005850a5b718730ef44c28`. Only reviewed 3B.1 file paths may be
+environment. The script verifies the main branch and accepted 3B.1 checkpoint
+`779313504a658ea5e7768c5e98f420944d47e4ea`. Only reviewed 3B.2 file paths may be
 modified/untracked; unexpected paths stop execution. The baseline check must be
 reviewed after a future owner-created checkpoint rather than silently bypassed.
 The frozen runner intentionally refuses a different HEAD after the 3B.1 commit;
@@ -144,16 +149,18 @@ The session fixture requires a fresh database, upgrades, checks revision/table
 creation, downgrades, checks that only Alembic's empty version table remains,
 then re-upgrades. Each constraint
 test uses synthetic rows in its own rollback-only transaction. Teardown verifies
-application tables are empty and the initial revision remains installed. No
-application persistence service or idempotent upsert implementation is introduced.
+application tables are empty and the initial revision remains installed.
+The new persistence tests use committed transactions and independent connections;
+each case removes only its known synthetic run IDs and associated configuration
+rows. They never drop tables, reset volumes, or perform Docker cleanup.
 
 Tests cover live catalog types/keys/indexes/check names, Alembic metadata comparison,
 unique configuration/hour keys, coordinate versions, null values, finite numeric
 bounds, missing and mismatched lineage, interval alignment/order, timezone round
 trips, and migration target guards. TIMESTAMPTZ normalizes instants and cannot
 prove that the original caller supplied UTC. Complete coverage, immutable
-configuration, and cross-row interval semantics still require future application
-validation. Successful metadata comparison alone does not exercise every CHECK;
+configuration, and cross-row interval semantics require application validation,
+now implemented in the 3B.2 write boundary. Successful metadata comparison alone does not exercise every CHECK;
 the individual insertion/update tests supply enforcement evidence once executed.
 The 52 original database cases are preserved, with two added cases for pg8000
 bound values/session settings and savepoint rollback. pg8000 raises DB-API
@@ -165,7 +172,7 @@ The runner writes ignored `artifacts/postgres/<project>/report.json`, sanitized
 `pytest.txt`, and integration `coverage.json` when tests run. Reports distinguish
 preflight stage failures from test failures and record exit codes. Driver/dialect
 imports are checked before Docker creation. Secrets/raw connection diagnostics
-are never included. Review the report and test counts before declaring 3B.1 complete.
+are never included. The 3B.2 report and test counts have been reviewed and accepted.
 
 No automatic cleanup runs, on success or failure. Containers/volumes created by
 the invocation remain for inspection and consume local resources. Review the
@@ -181,7 +188,11 @@ network-loss recovery, production permissions/TLS, and application persistence
 are not established by this test run. Future defects require focused corrections
 and repeat verification.
 
-Milestone 3B.2 needs separate approval: domain-to-storage mappings, transactional
-idempotent chunk writes, deliberate correction/lineage policy, atomic completion,
-concurrency, and injected failure/recovery tests. No live weather requests,
-FastAPI endpoints, scheduling, or deployment belong to this milestone.
+Milestone 3B.2 verifies mappings, transactional chunk writes, correction/lineage,
+atomic chunk completion, tested concurrent writers and injected rollback/retry.
+Process crashes, lost commit acknowledgements and automatic operational recovery
+remain unverified. The next recommended milestone is a small sequential ingestion
+command with explicit run identity/status and resume semantics, initially using
+synthetic transport and the disposable database. It requires separate approval.
+Live weather access, FastAPI endpoints, scheduling and deployment are not part of
+this acceptance review.
