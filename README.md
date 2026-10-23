@@ -10,7 +10,9 @@ deterministic testing, and measurable performance.
 
 ## Current status
 
-**Milestone 3C.1 ACCEPTED: 109 real PostgreSQL tests and 837 offline tests pass.**
+**Milestone 3D.1 ACCEPTED: 133 real PostgreSQL tests and 916 offline tests pass.**
+See the [final acceptance evidence](docs/development.md#milestone-3d1-final-acceptance).
+See [API contracts and local demonstration](docs/api.md).
 Transactional chunk persistence, replay, correction and tested writer contention
 are verified on PostgreSQL 18.6. Milestone 3C.1 adds a synthetic-only sequential
 ingestion command and explicit resume, verified against PostgreSQL 18.6.
@@ -41,6 +43,7 @@ Implemented:
 - Architecture, data, safety, and contribution instructions.
 - Explicit domain/storage mapping, atomic chunk writes, unchanged replay, and
   opt-in corrections with prior-value lineage, verified against PostgreSQL.
+- Read-only liveness/readiness, city catalogs and bounded hourly queries with keyset pagination.
 - A uv-managed local environment and resolved dependency lockfile.
 - Verified linting, formatting, coverage, and source/wheel packaging on Windows.
 
@@ -48,7 +51,7 @@ Implemented and verified in 3C.1: sequential chunk ingestion,
 durable status/counts, and explicit resume through a synthetic-only Python CLI.
 
 Not yet implemented: live operational ingestion, automated
-retries/recovery, API endpoints, logging configuration, orchestration,
+retries/recovery, write endpoints, logging configuration, orchestration,
 CI/CD, dashboards, or deployment. No live weather data has been fetched.
 
 ## Intended data scope
@@ -67,8 +70,8 @@ missing-data rules, and provenance requirements.
 ## Architecture
 
 One modular monolith shares domain and storage services between the synthetic CLI
-and future API entry points. The coordinator retrieves injected synthetic data,
-validates and persists one chunk at a time; the future API will query stored data without calling
+and read-only API entry points. The coordinator retrieves injected synthetic data,
+validates and persists one chunk at a time; the API queries stored data without calling
 Open-Meteo on each request.
 
 | Module | Responsibility | Current state |
@@ -78,7 +81,7 @@ Open-Meteo on each request.
 | `sources` | Request planning, HTTP retrieval, response parsing | ERA5 planning, bounded HTTP client, pure normalization; verified offline |
 | `ingestion` | Application workflow and explicit lifecycle | Sequential synthetic coordinator and start/status/resume CLI; accepted after host verification |
 | `storage` | PostgreSQL schema, mapping and transactions | Accepted schema/migrations and transactional chunk persistence |
-| `api/routes` | FastAPI query endpoints | Reserved package |
+| `api/routes` | Read-only FastAPI endpoints | Accepted after real PostgreSQL verification |
 
 See [architecture decisions](docs/architecture.md) and the
 [synthetic CLI commands](docs/ingestion.md#local-commands). Observability beyond
@@ -211,15 +214,23 @@ another PowerShell session cannot be confirmed here; commands below explicitly
 select the verified project-local executable and do not change other installs.
 
 Runtime dependencies are Pydantic, pydantic-settings, SQLAlchemy, Alembic, and the
-pure-Python PostgreSQL driver pg8000. The separate `dev`
-dependency group contains pytest, pytest-cov, Ruff, and the pinned setuptools
+pure-Python PostgreSQL driver pg8000, FastAPI and Uvicorn. The separate `dev`
+dependency group contains httpx2 for in-process ASGI tests, pytest, pytest-cov, Ruff, and the pinned setuptools
 build backend. `uv.lock` records resolved versions and package hashes. Keep the
 lockfile under version control. The HTTP client uses the standard library;
-third-party HTTP clients and API frameworks are still absent. pg8000 replaces
+the API never invokes it. httpx2 is development-only, not an ingestion client. pg8000 replaces
 Psycopg after Windows Application Control rejected its native library. Driver
 imports and compatibility checks pass on Python 3.14.4. The host workflow passed
 54 tests on PostgreSQL 18.6 without security-policy changes. See the
 [acceptance evidence](docs/development.md#milestone-3b1-final-acceptance).
+
+SQLAlchemy also uses its officially supported **pure-Python source build** at
+version **2.1.6**, because Windows Application Control rejected its optional
+Cython extension. `pyproject.toml` makes this the project-wide uv policy; it does
+not change dependency versions or security settings. See the
+[compatibility remediation](docs/development.md#sqlalchemy-pure-python-remediation)
+for evidence and source-build/cache requirements. The flag is a build setting;
+setting it only at runtime does not fix an installed native wheel.
 
 ### Windows setup and installation
 
@@ -251,6 +262,7 @@ Install the project and development tools into `.venv` from the existing lock:
 ```powershell
 & ./.tools/uv/bin/uv.exe --version
 & ./.tools/uv/bin/uv.exe sync --locked --python $basePython --no-managed-python --default-index https://pypi.org/simple
+& ./.venv/Scripts/python.exe -I -B scripts/verify_sqlalchemy.py
 & ./.venv/Scripts/python.exe -I -B -c "import hellas_dataops; print('Installed package import OK')"
 ```
 
@@ -265,6 +277,24 @@ $lockBefore = (Get-FileHash uv.lock -Algorithm SHA256).Hash
 if ($LASTEXITCODE -ne 0) { throw 'Locked sync failed' }
 if ($lockBefore -ne (Get-FileHash uv.lock -Algorithm SHA256).Hash) { throw 'Lockfile changed' }
 ```
+
+To replace an older compiled SQLAlchemy installation once (project root, same
+local cache/temp settings), run:
+
+```powershell
+& ./.tools/uv/bin/uv.exe sync --locked --no-binary-package sqlalchemy --reinstall-package sqlalchemy --python .venv/Scripts/python.exe
+if ($LASTEXITCODE -ne 0) { throw 'Compatible dependency installation failed' }
+& ./.venv/Scripts/python.exe -I -B scripts/verify_sqlalchemy.py
+if ($LASTEXITCODE -ne 0) { throw 'Pure-Python SQLAlchemy verification failed' }
+```
+
+This downloads/builds only as needed from the configured standard package index.
+Offline operation requires the source archive, build requirements and compatible
+built wheel already cached. Ordinary future `uv sync --locked` uses the same
+project policy. The PostgreSQL runner forces an **offline** SQLAlchemy reinstall
+and verifies it before importing storage or contacting Docker. It stops safely
+if the required cache is missing. Generic pip installation outside this project
+does not inherit uv settings; follow the documented project setup.
 
 Only a deliberate dependency update should run `uv lock` without `--check`.
 The original lock was generated with `uv lock --python $basePython
@@ -334,7 +364,7 @@ restricted to the explicit disposable-test API used by the host verification scr
 See [development verification](docs/development.md#milestone-3a-schema-and-migration-foundation)
 for dependency versions, migration checks, and fresh distribution installations.
 
-For Milestone 3C.1 verification, open ordinary Windows PowerShell in the repository root and run:
+For Milestone 3D.1 verification, open ordinary Windows PowerShell in the repository root and run:
 
 ```powershell
 & .\scripts\verify-postgres.ps1
@@ -344,11 +374,11 @@ This creates a new isolated PostgreSQL test environment only after preflight,
 runs migration lifecycle and constraint tests, and writes a sanitized report under
 `artifacts/postgres/`. It never deletes volumes or touches other projects. Read
 [PostgreSQL testing](docs/postgres-testing.md) before execution, including driver
-policy failures and retained-resource limits. The runner now recognizes the
-accepted 3B.2 checkpoint `34a9c087adfa28c783dc8e319c6ca6c278b2e49e` and collects
-109 PostgreSQL tests (83 existing plus 26 operational cases), all passed in the
-accepted host run. After the 3C.1 checkpoint, review the frozen HEAD gate during
-the next authorized milestone; no further database run is needed for acceptance.
+policy failures and retained-resource limits. The runner recognizes the accepted 3C.1 checkpoint
+`9d4c4b037eaa13e2fff42cce77a1fcf0505e9de1` and includes new API query tests.
+All 133 PostgreSQL tests passed in the accepted host run; see [API verification](docs/api.md).
+After the local checkpoint, the frozen runner HEAD gate requires a deliberate
+review in the next authorized milestone before another database run.
 
 | Environment variable | Default | Accepted values |
 | --- | --- | --- |
@@ -382,7 +412,7 @@ or environment dumps; structured validation errors may still contain inputs.
 | 3B.1 | Disposable PostgreSQL, guarded migrations, real constraint tests | ACCEPTED: 54 PostgreSQL tests and 699 offline tests pass |
 | 3B.2 | Transactional idempotent writes and rollback | ACCEPTED: 83 PostgreSQL tests and 750 offline tests pass |
 | 3C.1 | Sequential synthetic CLI ingestion, durable status and explicit resume | ACCEPTED: 837 offline tests and 109 PostgreSQL tests pass |
-| 3D.1 | Small read-only FastAPI layer, bounded queries, health/readiness and OpenAPI | Recommended next; not started |
+| 3D.1 | Small read-only FastAPI layer, bounded queries, health/readiness and OpenAPI | ACCEPTED: 916 offline and 133 PostgreSQL tests pass |
 | 4 | Controlled live ingestion, operational configuration and full backfill | Separately gated; requires approval and service-terms review |
 | 6 | Controlled end-to-end demonstration, benchmarks, runbook, portfolio evidence | Planned |
 

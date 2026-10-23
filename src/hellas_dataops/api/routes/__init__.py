@@ -1,1 +1,1 @@
-"""Reserved for future query routes; no endpoints are implemented."""
+"""Read-only health and stored-weather routes."""

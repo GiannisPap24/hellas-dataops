@@ -265,12 +265,22 @@ lake, object storage, and a time-series extension are unnecessary at MVP scale.
 
 ## Query interface
 
-Future FastAPI routes will query PostgreSQL and never synchronously fetch
-weather upstream. Proposed contracts include city listing, bounded hourly
-weather queries, and separate liveness/readiness endpoints. Inputs require
-validation, stable ordering, and bounded pagination. Use parameterized queries.
-Readiness will report database/schema availability without exposing connection
-details. These endpoints do not exist yet.
+`api.app.create_app(target=None)` constructs the application without I/O.
+Synchronous routes depend on `get_queries`; tests override that dependency or use
+in-memory ASGI transport against the real query service. `api.models` owns HTTP
+schemas; `storage.queries.WeatherQuery` reuses domain UTC/interval validation.
+`ReadQueries` resolves public identities, projects canonical fields and fetches
+at most limit + 1 rows with Core bound parameters and the existing weather PK.
+
+Each database operation opens the existing verified disposable connection,
+starts a read-only REPEATABLE READ transaction, and closes it on every outcome.
+No engine exists at import time and no API route retrieves weather or writes
+application rows. A page is internally consistent; separate pages are current
+reads, not one retained snapshot. Readiness checks revision, column types,
+nullability and SELECT availability, not every constraint definition on each call.
+See [the API contract](api.md) for exact errors, limits, configuration and demos.
+PostgreSQL-backed query verification passed: 24 API cases plus 109 existing
+database cases. See the final 3D.1 acceptance record in development.md.
 
 ## Configuration and dependencies
 
@@ -282,7 +292,7 @@ Database and source settings will be added with their consuming features.
 Current runtime dependencies are Pydantic, pydantic-settings, SQLAlchemy,
 Alembic, and pg8000 (pure Python). Alembic is runtime tooling because installed distributions expose offline
 migration generation. pytest, pytest-cov, and Ruff are development tools.
-FastAPI/Uvicorn remain future dependencies. Driver imports are deferred until
+FastAPI/Uvicorn serve the local read-only API; httpx2 is development-only ASGI test tooling. Driver imports are deferred until
 explicit database access. pg8000 avoids the native Psycopg component rejected by
 Windows Application Control. Integration tests allow only their explicit test
 database port; default unit tests still block all network access.
@@ -319,7 +329,7 @@ and do not establish live-provider or database behaviour.
 
 ## Deferred decisions
 
-- A small read-only API over stored synthetic observations, with bounded queries.
+- A reproducible synthetic CLI-to-API demonstration and intentional production configuration.
 - Raw-payload retention, automatic interruption detection and retry policy.
 - Public demo service eligibility and repository code licence.
 - CI/CD, scheduling, cloud hosting, and additional sources; disposable test containers already exist.

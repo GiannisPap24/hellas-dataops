@@ -1,6 +1,6 @@
 # Historical weather data contract
 
-Contract version: **0.7** (additive operational provenance; domain/source contracts unchanged).
+Contract version: **0.8** (additive read-only API; domain/source/storage contracts unchanged).
 Canonical objects and domain validation were implemented
 in Milestone 2A. Milestone 2B implements pure Open-Meteo response normalization.
 Milestone 2C adds offline request planning and request intent provenance.
@@ -740,3 +740,25 @@ coverage, then skips only verified completed chunks. Registry/contract mismatche
 are rejected. No response independently proves ERA5, and the operation marker
 explicitly identifies invented synthetic data in the disposable test database.
 See [the operational contract](ingestion.md) for statuses and ambiguous outcomes.
+
+## Read-only query contract (Milestone 3D.1)
+
+See [api.md](api.md) for the authoritative HTTP interface. Queries require city,
+coordinate version, provider, dataset and UTC inclusive-start/exclusive-end hours.
+The interval is at most 31 days; pages default to 100 and never exceed 500 rows.
+An optional exclusive `after` hour supplies keyset continuation within the same
+identity and interval. Missing hours are omitted, never fabricated; all-null rows
+remain present. A page is not a coverage-completeness or successful-run assertion.
+Previously committed chunks of an incomplete run can be read.
+
+Responses retain canonical units and nulls and expose stored dataset model and
+source-contract identity. `city.latitude/longitude` are requested coordinates,
+not provider grid coordinates. Raw request/correction JSON, connection details,
+internal keys and run identifiers are not returned. Dataset model records request
+intent, not independent proof of ERA5 delivery. All demonstration data remains
+synthetic. Precipitation retains the preceding-hour accumulation convention.
+
+Each page uses a read-only database snapshot; pagination across requests is not a
+snapshot. Corrections are visible on later requests; timestamps already passed
+are not revisited. Newly inserted earlier hours can be missed by an ongoing
+traversal. Restart traversal over a quiescent dataset for a consistent export.

@@ -6,6 +6,7 @@ This is an installation check, not a replacement for the unit test suite.
 
 import importlib
 import importlib.metadata
+import importlib.util
 import json
 import site
 import sys
@@ -18,6 +19,13 @@ def main() -> None:
         raise RuntimeError("Run with -I using a fresh virtual environment")
     if site.ENABLE_USER_SITE:
         raise RuntimeError("User-site packages must be disabled")
+
+    spec = importlib.util.spec_from_file_location(
+        "sqlalchemy_preflight", Path(__file__).with_name("verify_sqlalchemy.py")
+    )
+    preflight = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(preflight)
+    preflight.verify()
 
     site_packages = Path(sys.prefix).resolve() / "Lib" / "site-packages"
     modules = (
@@ -48,6 +56,13 @@ def main() -> None:
         "hellas_dataops.storage.migrations.versions",
         "hellas_dataops.api",
         "hellas_dataops.api.routes",
+        "hellas_dataops.api.app",
+        "hellas_dataops.api.models",
+        "hellas_dataops.api.routes.read",
+        "hellas_dataops.api.__main__",
+        "hellas_dataops.storage.queries",
+        "fastapi",
+        "uvicorn",
         "pydantic",
         "pydantic_settings",
         "pydantic_core",
@@ -75,6 +90,16 @@ def main() -> None:
     direct_url = json.loads(distribution.read_text("direct_url.json") or "{}")
     if direct_url.get("dir_info", {}).get("editable", False):
         raise RuntimeError("Distribution verification must not use an editable install")
+
+    from hellas_dataops.api.app import create_app
+
+    if set(create_app().openapi()["paths"]) != {
+        "/health/live",
+        "/health/ready",
+        "/v1/cities",
+        "/v1/weather",
+    }:
+        raise RuntimeError("Installed API contract failed")
 
     from hellas_dataops.config import Settings
 

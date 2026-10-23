@@ -71,7 +71,7 @@ def database_config(request):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def block_network(database_config):
+def block_network(database_config, api_event_loop):
     # Override only in this opt-in subtree. Root offline protection is unchanged.
     with pytest.MonkeyPatch.context() as patch:
         restrict_database_network(patch, database_config)

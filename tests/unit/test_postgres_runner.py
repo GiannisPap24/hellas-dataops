@@ -186,11 +186,13 @@ def test_driver_import_failure_stops_before_docker(runner, monkeypatch, tmp_path
 
     monkeypatch.setattr(runner, "ROOT", tmp_path)
     monkeypatch.setattr(runner, "verify_repository", lambda: [])
-    calls = MagicMock(return_value="")
+    calls = MagicMock(side_effect=["", "", "", '{"status":"passed"}'])
     monkeypatch.setattr(runner, "command", calls)
     monkeypatch.setitem(sys.modules, "pg8000", None)
     assert runner.main() == 1
-    assert len(calls.call_args_list) == 2  # Lock and package checks only.
+    assert (
+        len(calls.call_args_list) == 4
+    )  # Lock, sync, compatibility, pure-build probe.
     assert all("docker" not in call.args[0] for call in calls.call_args_list)
     report_path = next((tmp_path / "artifacts/postgres").rglob("report.json"))
     assert json.loads(report_path.read_text())["stage"] == "pg8000-driver-import"
@@ -224,6 +226,8 @@ def test_host_workflow_with_mocked_processes(
         calls.append(args)
         if "--show-toplevel" in args:
             return str(tmp_path)
+        if any(str(arg).endswith("verify_sqlalchemy.py") for arg in args):
+            return json.dumps({"status": "passed", "pure_python": True})
         if "version" in args and "compose" not in args:
             return json.dumps({"Server": {"Version": "synthetic"}})
         if "info" in args:
@@ -255,7 +259,110 @@ def test_host_workflow_with_mocked_processes(
     assert not any("prune" in c or "down" in c or "rm" in c for c in calls)
     if collision:
         assert report["stage"] == "resource-collision-check"
-        assert not (tmp_path / ".tools").exists()
+        assert not (tmp_path / ".tools/postgres").exists()
+        assert (tmp_path / ".tools/tmp").is_dir()  # Only dependency-build temporaries.
     else:
         assert report["pytest_exit_code"] == 0
         assert target.password not in (report_path.parent / "pytest.txt").read_text()
+
+
+@pytest.mark.parametrize("stage", ["sync", "probe"])
+def test_dependency_failure_stops_before_docker_and_is_reported(
+    runner, monkeypatch, tmp_path, stage
+):
+    monkeypatch.setattr(runner, "ROOT", tmp_path)
+    monkeypatch.setattr(runner, "verify_repository", lambda: [])
+    calls = []
+
+    def command(args, **kwargs):
+        calls.append(args)
+        if "sync" in args:
+            assert kwargs["env"]["UV_PROJECT_ENVIRONMENT"] == str(tmp_path / ".venv")
+        if (stage == "sync" and "sync" in args) or (
+            stage == "probe"
+            and any(str(a).endswith("verify_sqlalchemy.py") for a in args)
+        ):
+            raise runner.RunnerError("Dependency preflight failed", exit_code=1)
+        return ""
+
+    monkeypatch.setattr(runner, "command", command)
+    assert runner.main() == 1
+    assert all("docker" not in c for c in calls)
+    assert not (tmp_path / ".tools/postgres").exists()
+    report = json.loads(
+        next((tmp_path / "artifacts/postgres").rglob("report.json")).read_text()
+    )
+    assert report["stage"] == (
+        "locked-environment" if stage == "sync" else "sqlalchemy-pure-python"
+    )
+    assert report["command_exit_code"] == 1
+
+
+def test_runner_can_load_when_sqlalchemy_import_is_blocked(monkeypatch):
+    import builtins
+
+    original = builtins.__import__
+
+    def guarded(name, *args, **kwargs):
+        if name.startswith(("sqlalchemy", "hellas_dataops")):
+            raise ImportError("Simulated native extension rejection")
+        return original(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", guarded)
+    path = Path(__file__).resolve().parents[2] / "scripts/verify_postgres.py"
+    spec = importlib.util.spec_from_file_location("blocked_runner", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert callable(module.main)
+
+
+@pytest.fixture
+def pure_probe():
+    path = Path(__file__).resolve().parents[2] / "scripts/verify_sqlalchemy.py"
+    spec = importlib.util.spec_from_file_location("pure_probe", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_actual_pure_distribution_probe(pure_probe):
+    result = pure_probe.verify()
+    assert result["sqlalchemy"] == "2.1.6"
+    assert result["native_files"] == 0
+    assert result["python_extension_modules"] == 8
+    assert result["wheel_tag"] == "py3-none-any"
+
+
+@pytest.mark.parametrize("compiled_metadata", [False, True])
+def test_probe_rejects_native_distribution_before_import(
+    pure_probe, monkeypatch, tmp_path, compiled_metadata
+):
+    package = tmp_path / "sqlalchemy"
+    package.mkdir()
+    (package / "synthetic.pyd").write_bytes(b"not executable")
+    distribution = SimpleNamespace(
+        version="2.1.6",
+        locate_file=lambda _: package,
+        read_text=lambda _: (
+            "Root-Is-Purelib: false\nTag: cp314-cp314-win_amd64"
+            if compiled_metadata
+            else "Root-Is-Purelib: true\nTag: py3-none-any"
+        ),
+    )
+    monkeypatch.setattr(
+        pure_probe.importlib.metadata, "distribution", lambda _: distribution
+    )
+    monkeypatch.setattr(pure_probe.sysconfig, "get_path", lambda _: str(tmp_path))
+    with pytest.raises(RuntimeError, match="pure-Python|native"):
+        pure_probe.verify()
+
+
+def test_probe_sanitizes_import_errors(pure_probe, monkeypatch, capsys):
+    def failure():
+        raise ImportError("private host path and diagnostics")
+
+    monkeypatch.setattr(pure_probe, "verify", failure)
+    assert pure_probe.main() == 1
+    result = json.loads(capsys.readouterr().out)
+    assert result["error_type"] == "ImportError"
+    assert "private" not in result["error"]

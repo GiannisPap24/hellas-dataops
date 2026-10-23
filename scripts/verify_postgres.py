@@ -10,9 +10,7 @@ import sys
 import uuid
 from pathlib import Path
 
-from hellas_dataops.storage.test_database import TestDatabaseConfig
-
-BASELINE = "34a9c087adfa28c783dc8e319c6ca6c278b2e49e"
+BASELINE = "9d4c4b037eaa13e2fff42cce77a1fcf0505e9de1"
 IMAGE = "postgres:18.6-bookworm"
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -113,28 +111,33 @@ def main() -> int:
     try:
         report["working_tree"] = verify_repository()
         report["checkpoint"] = BASELINE
-        # Reviewed 3C.1 changes only; the accepted schema and dependencies are frozen.
+        # Reviewed 3D.1 paths; no schema, source, or persistence changes.
         allowed = {
             "AGENTS.md",
             "README.md",
-            "tests/unit/test_postgres_runner.py",
-            "tests/unit/test_coordinator.py",
-            "tests/unit/test_run_tracking.py",
-            "tests/integration/test_operational_ingestion.py",
+            "pyproject.toml",
+            "uv.lock",
+            "docs/api.md",
             "docs/architecture.md",
             "docs/data-contract.md",
             "docs/development.md",
-            "docs/storage-schema.md",
             "docs/postgres-testing.md",
-            "docs/persistence.md",
-            "docs/ingestion.md",
             "scripts/verify_postgres.py",
+            "scripts/verify_sqlalchemy.py",
+            "tests/unit/test_postgres_runner.py",
             "scripts/verify_installed.py",
-            "src/hellas_dataops/storage/persistence.py",
-            "src/hellas_dataops/storage/run_tracking.py",
-            "src/hellas_dataops/ingestion/coordinator.py",
-            "src/hellas_dataops/ingestion/__main__.py",
-            "src/hellas_dataops/sources/synthetic.py",
+            "src/hellas_dataops/api/app.py",
+            "src/hellas_dataops/api/__init__.py",
+            "src/hellas_dataops/api/routes/__init__.py",
+            "src/hellas_dataops/api/models.py",
+            "src/hellas_dataops/api/__main__.py",
+            "src/hellas_dataops/api/routes/read.py",
+            "src/hellas_dataops/storage/queries.py",
+            "tests/conftest.py",
+            "tests/integration/conftest.py",
+            "tests/integration/test_api_postgres.py",
+            "tests/unit/test_api.py",
+            "tests/unit/test_queries.py",
         }
         if any(
             line.split(" ", 1)[-1] not in allowed or line.startswith(("D ", "R ", "C "))
@@ -150,10 +153,50 @@ def main() -> int:
             if not k.upper().startswith(("PG", "HELLAS_", "COMPOSE_", "DOCKER_"))
         }
         env.update(UV_CACHE_DIR=str(ROOT / ".uv-cache"), UV_PYTHON_DOWNLOADS="never")
+        temporary = ROOT / ".tools/tmp"
+        temporary.mkdir(parents=True, exist_ok=True)
+        env.update(
+            TEMP=str(temporary),
+            TMP=str(temporary),
+            UV_LINK_MODE="copy",
+            UV_PROJECT_ENVIRONMENT=str(ROOT / ".venv"),
+        )
         env["COMPOSE_DISABLE_ENV_FILE"] = "1"
         uv = str(ROOT / ".tools/uv/bin/uv.exe")
         command([uv, "lock", "--check", "--offline"], env=env)
+        # Build policy lives in pyproject.toml. Force replacement of older native
+        # installations before importing any application/SQLAlchemy modules.
+        command(
+            [
+                uv,
+                "sync",
+                "--locked",
+                "--offline",
+                "--python",
+                sys.executable,
+                "--no-binary-package",
+                "sqlalchemy",
+                "--reinstall-package",
+                "sqlalchemy",
+            ],
+            env=env,
+            timeout=180,
+        )
         command([uv, "pip", "check", "--offline", "--python", sys.executable], env=env)
+        report["stage"] = "sqlalchemy-pure-python"
+        report["sqlalchemy_build"] = json.loads(
+            command(
+                [
+                    sys.executable,
+                    "-I",
+                    "-B",
+                    str(ROOT / "scripts/verify_sqlalchemy.py"),
+                ],
+                env=env,
+            )
+        )
+        if report["sqlalchemy_build"].get("status") != "passed":
+            raise RunnerError("SQLAlchemy pure-Python preflight failed")
         report["stage"] = "pg8000-driver-import"
         try:
             import pg8000
@@ -161,6 +204,7 @@ def main() -> int:
 
             driver = PGDialect_pg8000.import_dbapi()
             dialect = PGDialect_pg8000(dbapi=driver)
+            from hellas_dataops.storage.test_database import TestDatabaseConfig
         except ImportError:
             raise RunnerError(
                 "pg8000 or its SQLAlchemy dialect could not be imported; verify the locked project environment."
@@ -168,7 +212,7 @@ def main() -> int:
 
         report["versions"] = {
             n: importlib.metadata.version(n)
-            for n in ("pg8000", "sqlalchemy", "alembic")
+            for n in ("pg8000", "sqlalchemy", "alembic", "fastapi", "uvicorn", "httpx2")
         }
         report["driver_implementation"] = "postgresql+pg8000"
         assert pg8000.__version__ == report["versions"]["pg8000"]
@@ -311,6 +355,7 @@ def main() -> int:
                 str(config_file),
                 "--cov=src/hellas_dataops/storage",
                 "--cov=hellas_dataops.ingestion.coordinator",
+                "--cov=src/hellas_dataops/api",
                 "--cov-report=term-missing",
                 f"--cov-report=json:{report_dir / 'coverage.json'}",
                 "--tb=no",

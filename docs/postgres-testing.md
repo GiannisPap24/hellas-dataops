@@ -23,6 +23,13 @@ PowerShell window in the Hellas DataOps repository root:
 ```
 
 The wrapper invokes `.venv/Scripts/python.exe -I -B scripts/verify_postgres.py`.
+The Python runner initially imports only the standard library. After repository
+checks it performs locked offline synchronization with SQLAlchemy forced to the
+project's pure-Python build, checks dependencies and invokes the connection-free
+`verify_sqlalchemy.py` probe. Only then does it import storage/pg8000 and contact
+Docker. Missing cached source/build requirements or blocked imports produce a
+sanitized report before any Docker resource is created. For first-time source
+cache preparation, use the [README installation command](../README.md).
 It does not elevate, change execution policy, modify Docker permissions, or
 expose the Docker API over TCP. If local policy blocks the PowerShell wrapper,
 the equivalent command in the same directory is:
@@ -47,15 +54,14 @@ PostgreSQL 18.6 with 54 passing tests. Alembic uses the existing
 SQLAlchemy connection and needs no driver-specific migration changes.
 
 Use Windows x64 / CPython 3.14.4 with the existing local uv 0.13.4 and locked
-environment. The script verifies main at the accepted 3B.2 checkpoint
-`34a9c087adfa28c783dc8e319c6ca6c278b2e49e`. Only reviewed 3C.1 paths may be
-modified/untracked; unexpected paths stop execution. The current suite collects
-109 cases: 83 accepted database tests plus 26 new operational ingestion cases.
-All 109 cases passed in 33.10 seconds on the owner host. The exact evidence is
-`artifacts/postgres/hellas-dataops-test-4a43cbabd8ba/report.json`;
-see [final acceptance](development.md#milestone-3c1-final-acceptance).
-Coverage now includes storage and the coordinator. The baseline must be reviewed
-after any future checkpoint; never bypass the guard.
+environment. The script verifies main at the accepted 3C.1 checkpoint
+`9d4c4b037eaa13e2fff42cce77a1fcf0505e9de1`. Only reviewed 3D.1/remediation paths may
+be modified/untracked; unexpected paths stop execution. The current suite
+collects 133 cases, including 24 new API tests, which still require a successful
+host run. The accepted prior 109-test evidence remains
+`artifacts/postgres/hellas-dataops-test-4a43cbabd8ba/report.json`; it is not evidence
+for the new API or pure-Python SQLAlchemy environment. Coverage includes storage,
+coordinator and API. The baseline must be reviewed after any future checkpoint.
 
 ## Infrastructure and preflight
 
@@ -200,3 +206,45 @@ simulated acknowledgement loss and explicit resume. Actual process crashes and
 network-partition recovery remain untested.
 Live weather access, FastAPI endpoints, scheduling and deployment are not part of
 this acceptance review.
+
+## Milestone 3D.1 read-only API host verification
+
+The current runner recognizes accepted checkpoint
+`9d4c4b037eaa13e2fff42cce77a1fcf0505e9de1`, with an explicit 3D.1 changed-path
+allowlist. The PowerShell wrapper and Docker identity/ownership guards are
+unchanged; the Python runner now verifies the pure-Python SQLAlchemy build first. Run `& .\scripts\verify-postgres.ps1` from ordinary Windows
+PowerShell in this repository. The run now includes API query integration tests
+and API/storage coverage. The 109 earlier PostgreSQL passes are historical,
+not the sole evidence for the new API. The host run
+`hellas-dataops-test-e8c550622181` passed all 133 tests with pytest exit code zero
+on PostgreSQL 18.6. Milestone 3D.1 is accepted; see the final acceptance record in
+development.md. No Docker operation was attempted from the sandbox. After the
+owner's checkpoint, review the frozen runner HEAD gate in the next authorized
+milestone before using it again; do not weaken the checkpoint guard.
+
+The integration event loop initializes its Windows internal wake-up socket
+before the session network guard; ASGI requests then execute entirely in memory
+under the unchanged exact-database-port restriction. No arbitrary loopback
+connection allowance is added. GET tests compare all five application tables;
+only test fixture setup/cleanup writes through the accepted persistence layer
+or explicit synthetic catalog fixtures. New authentication/ownership failure
+cases target the same disposable server, never another database or port.
+See [API demonstration and limits](api.md).
+
+## SQLAlchemy native-extension compatibility
+
+Windows Application Control rejected `sqlalchemy.sql._cache_key_cy` before the
+old runner entered main; therefore that attempt could not create a new sanitized
+report or Docker resources. SQLAlchemy's official source-build option
+`DISABLE_SQLALCHEMY_CEXT=1` removes the optional compiled extensions from the built
+distribution. The project uses uv `no-binary-package` and `extra-build-variables`
+for SQLAlchemy only. pg8000 stays at 1.31.5. No `.pyd` file is manually removed,
+no SQLAlchemy internals are patched and no security setting changes.
+
+The new probe requires version 2.1.6 inside the active virtual environment, a
+pure `py3-none-any` wheel, no native files and eight Python implementations. It
+imports Core, Alembic and the pg8000 dialect without a connection. The report
+records this evidence under `sqlalchemy_build`. Raw native-loader diagnostics,
+paths and connection errors are not exposed by the runner. Detailed build and
+verification commands are in [development.md](development.md#sqlalchemy-pure-python-remediation).
+Only actual host test results can establish PostgreSQL/API acceptance.

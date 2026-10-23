@@ -1,10 +1,54 @@
 """Offline protection for the default unit test suite."""
 
+import asyncio
 import os
 import socket
+from contextlib import contextmanager
 from typing import NoReturn
 
 import pytest
+
+
+@pytest.fixture(scope="session")
+def api_event_loop():
+    """Initialize Windows' internal wake-up socket before per-test network guards.
+
+    No HTTP or database connection is opened. All request execution still occurs
+    under the unchanged unit or exact-database-target integration network guard.
+    """
+    with asyncio.Runner() as runner:
+        runner.get_loop()
+        yield runner
+
+
+@pytest.fixture
+def api_client(api_event_loop):
+    """Synchronous facade over the supported in-memory async ASGI test transport."""
+    import httpx2
+
+    @contextmanager
+    def make(app):
+        class Client:
+            def request(self, method, path, **kwargs):
+                async def send():
+                    async with httpx2.AsyncClient(
+                        transport=httpx2.ASGITransport(app=app),
+                        base_url="http://testserver",
+                        trust_env=False,
+                    ) as client:
+                        return await client.request(method, path, **kwargs)
+
+                return api_event_loop.run(send())
+
+            def get(self, path, **kwargs):
+                return self.request("GET", path, **kwargs)
+
+            def post(self, path, **kwargs):
+                return self.request("POST", path, **kwargs)
+
+        yield Client()
+
+    return make
 
 
 @pytest.fixture(autouse=True)

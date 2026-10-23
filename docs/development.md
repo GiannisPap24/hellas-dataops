@@ -1,8 +1,8 @@
 # Development and verification
 
-For the current integrated workflow, see [Milestone 2E](#milestone-2e-offline-source-pipeline).
-The current accepted database verification is recorded in
-[Milestone 3B.1 final acceptance](#milestone-3b1-final-acceptance).
+For the current accepted API and database verification, see
+[Milestone 3D.1 final acceptance](#milestone-3d1-final-acceptance).
+Earlier source integration is recorded in [Milestone 2E](#milestone-2e-offline-source-pipeline).
 The schema checkpoint is recorded in
 [Milestone 3A](#milestone-3a-schema-and-migration-foundation).
 Earlier records below remain historical.
@@ -1527,3 +1527,580 @@ Open-Meteo access, production database configuration and the five-city 2025 back
 remain separately approved MVP work after service-term/operating-condition review.
 Scheduling, cloud deployment, background workers and extra sources are optional.
 No API implementation or next-milestone dependency change is part of this review.
+
+## Milestone 3D.1 read-only FastAPI implementation
+
+Historical implementation record: offline checks passed before host acceptance.
+See the final 3D.1 acceptance record below for the subsequent verified result.
+The clean starting checkpoint was main at
+`9d4c4b037eaa13e2fff42cce77a1fcf0505e9de1`. No Git metadata, Docker resources,
+global configuration or live weather services were changed. The existing domain,
+source, coordinator, storage mapping/writer, schema and initial revision remain
+unchanged. See [api.md](api.md) for contracts, error semantics and the synthetic
+local demonstration.
+
+### Dependencies and compatibility
+
+The project-local uv 0.13.4 resolved and installed FastAPI **0.159.1**, Uvicorn
+**0.54.0** and development-only HTTPX2 **2.16.0** on CPython **3.14.4 Windows x64**.
+Starlette **1.9.0** and AnyIO **4.15.1** are transitive framework dependencies.
+The installed Starlette TestClient selects httpx2; its older httpx fallback is
+deprecated. Only plain Uvicorn is installed, without optional standard extras.
+No native driver or database dependency changed: pg8000 **1.31.5**, SQLAlchemy
+**2.1.6**, Alembic **1.20.0**, Pydantic **2.14.1**. All previously locked versions
+are preserved. uv.lock now resolves 41 packages across platform markers; 40 are
+installed in this Windows development environment. Other Python versions are not
+claimed supported or verified.
+
+Actual dependency commands, with the README's local cache/temp environment:
+
+```powershell
+& .\.tools\uv\bin\uv.exe add 'fastapi>=0.120,<1' 'uvicorn>=0.38,<1' --python .venv/Scripts/python.exe
+& .\.tools\uv\bin\uv.exe add --dev 'httpx2>=2,<3' --python .venv/Scripts/python.exe
+```
+
+Existing dependency version equality was checked by parsing HEAD:uv.lock and the
+new lock, not by assuming uv preserved versions. Repeated `sync --locked --offline`
+succeeded and left the lockfile hash unchanged. Runtime imports, generated
+OpenAPI and in-process HTTP execution succeed; installation alone is not claimed
+to prove real database queries.
+
+### Offline verification
+
+**909 tests pass, zero failures: 837 regressions plus 72 new API/query tests.**
+Ruff lint and formatting pass. The socket/DNS guard is unchanged. Windows' default
+TestClient initially failed because asyncio creates an internal loopback wake-up
+socket under the guard. Tests now use HTTPX2 ASGITransport with a session event
+loop initialized before guards; HTTP request execution remains guarded. A test
+explicitly demonstrates that a socket attempt inside an endpoint still fails.
+No test listener, external HTTP request or default-suite PostgreSQL connection
+is used. Integration tests retain their exact validated database-port guard.
+
+Coverage from `artifacts/coverage-3d1-offline.json`:
+
+| Scope | Statements | Branches | Combined |
+| --- | --- | --- | --- |
+| API factory, models, routes | 74/74 | 4/4 | 100% |
+| Core query module | 81/81 | 30/30 | 100% |
+| API launcher | 17/18 | 1/2 | 90% |
+| New runtime modules together | 172/173 | 35/36 | 99.04% |
+| Full package | 1222/1315 | 348/396 | 91.76% |
+
+The uncovered new line/branch is the `__main__` launcher guard; its `--help` command
+was executed separately without coverage. Actual Uvicorn serving and PostgreSQL
+query semantics are not established by these unit counts. Older persistence/run
+tracking database paths remain uncovered offline; their prior accepted host
+coverage is historical, not combined into these new percentages.
+
+Commands actually used (run from project root; check LASTEXITCODE after each):
+
+```powershell
+$env:TEMP = Join-Path $PWD '.tools/tmp'
+$env:TMP = $env:TEMP
+$env:UV_CACHE_DIR = Join-Path $PWD '.uv-cache'
+$env:UV_PYTHON_DOWNLOADS = 'never'
+$env:UV_LINK_MODE = 'copy'
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = '1'
+& .\.venv\Scripts\python.exe -I -B -m pytest -p no:cacheprovider -p pytest_cov --cov=src/hellas_dataops --cov-report=term --cov-report=json:artifacts/coverage-3d1-offline.json -q
+& .\.venv\Scripts\ruff.exe check .
+& .\.venv\Scripts\ruff.exe format --check .
+& .\.tools\uv\bin\uv.exe lock --check --offline
+& .\.tools\uv\bin\uv.exe sync --locked --offline --python .venv/Scripts/python.exe
+& .\.tools\uv\bin\uv.exe pip check --offline --python .venv/Scripts/python.exe
+& .\.venv\Scripts\python.exe -I -B -m hellas_dataops.api --help
+& .\.venv\Scripts\python.exe -I -B -m pytest tests/integration --postgres-config .tools/not-executed.json --collect-only -p no:cacheprovider -q
+```
+
+The last command only collected **133 tests**, opening no database: 109 accepted
+regression cases and **24 new API/PostgreSQL cases**. All 133 remain unexecuted
+for this change set. The new cases cover real persistence-backed reads, city and
+historical coordinate/dataset version isolation, UTC/null JSON, bounded keyset
+traversal, empty windows, rejected injection-shaped inputs, read-only enforcement,
+revision mismatch, actual authentication/ownership rejection, and correction
+visibility between pages. Ordinary GET cases snapshot all five tables before and
+after. Special synthetic catalog rows exercise historical identities outside the
+current source planner without broadening the accepted writer.
+
+### Distribution verification
+
+The wheel and source distribution built offline successfully in
+`dist/milestone-3d1/`. `verify_distributions.py` compared **89 source assets**,
+including 3 synthetic JSON fixtures and 10 documentation files, and **34 wheel
+modules** plus the Alembic template byte-for-byte. README metadata is present;
+no forbidden credential, cache, data or environment paths were packaged.
+
+Both artifacts were installed separately into fresh `.tools/verify-3d1-wheel`
+and `.tools/verify-3d1-sdist` environments. Before installation, imports confirmed
+that the project, FastAPI, SQLAlchemy and pytest were absent. Hashed runtime
+requirements exported from uv.lock installed offline. Each distribution then
+passed **45 isolated module imports**, generated-OpenAPI validation, installed
+planning/client/migration smoke checks, and compatibility checks for **27 runtime
+packages including the project**. Development HTTPX2 is not needed by the wheel.
+No global packages or manual PYTHONPATH were used.
+
+Exact commands (substitute `wheel`/`sdist` and the corresponding artifact):
+
+```powershell
+& .\.tools\uv\bin\uv.exe build --offline --no-build-isolation --python .venv/Scripts/python.exe --out-dir dist/milestone-3d1
+& .\.venv\Scripts\python.exe -I -B scripts/verify_distributions.py dist/milestone-3d1
+& .\.tools\uv\bin\uv.exe export --locked --offline --no-dev --no-emit-project --format requirements.txt --output-file .tools/runtime-requirements-3d1.txt
+& .\.tools\uv\bin\uv.exe venv .tools/verify-3d1-wheel --python .venv/Scripts/python.exe --offline --no-managed-python
+& .\.tools\uv\bin\uv.exe pip sync --python .tools/verify-3d1-wheel/Scripts/python.exe --offline --require-hashes .tools/runtime-requirements-3d1.txt
+& .\.tools\uv\bin\uv.exe pip install --python .tools/verify-3d1-wheel/Scripts/python.exe --offline --no-deps dist/milestone-3d1/hellas_dataops-0.1.0.dev0-py3-none-any.whl
+& .\.tools\verify-3d1-wheel\Scripts\python.exe -I -B scripts/verify_installed.py
+& .\.tools\uv\bin\uv.exe pip check --python .tools/verify-3d1-wheel/Scripts/python.exe --offline
+```
+
+Use a new environment directory for subsequent checks, not one containing old
+installations. The sdist command used `hellas_dataops-0.1.0.dev0.tar.gz`; uv built
+it with the cached pinned backend. Final documentation updates were rebuilt and
+archive comparisons rerun. The PowerShell wrapper parsed successfully; it was
+not executed against Docker. `git diff --check` passed, and a path-restricted
+HEAD comparison confirms accepted domain/source/ingestion/schema/writer modules
+are unchanged.
+
+### Host acceptance gate
+
+From ordinary Windows PowerShell, with Docker Desktop running:
+
+```powershell
+& .\scripts\verify-postgres.ps1
+```
+
+The reviewed Python runner recognizes the accepted 3C.1 HEAD and the exact current
+23-path change allowlist. It includes API/storage/coordinator coverage and records
+FastAPI/Uvicorn/HTTPX2 versions in the sanitized report. The wrapper, Docker image,
+localhost binding, unique ownership labels/marker, volume layout, resource
+collision checks and cleanup policy are unchanged. No sandbox escalation or
+Docker access was attempted. A read-only invocation of its repository gate
+confirmed the baseline; it did not run the Docker phase.
+
+Acceptance requires the owner's actual new report with successful pytest exit,
+all database tests passed, and review of any failures. Do not reuse the older
+109-test report as API evidence. No commit is created automatically.
+
+### Exact milestone inventory
+
+Created (9):
+
+- `docs/api.md`
+- `src/hellas_dataops/api/__main__.py`
+- `src/hellas_dataops/api/app.py`
+- `src/hellas_dataops/api/models.py`
+- `src/hellas_dataops/api/routes/read.py`
+- `src/hellas_dataops/storage/queries.py`
+- `tests/integration/test_api_postgres.py`
+- `tests/unit/test_api.py`
+- `tests/unit/test_queries.py`
+
+Modified (14):
+
+- `AGENTS.md`
+- `README.md`
+- `docs/architecture.md`
+- `docs/data-contract.md`
+- `docs/development.md`
+- `docs/postgres-testing.md`
+- `pyproject.toml`
+- `uv.lock`
+- `scripts/verify_installed.py`
+- `scripts/verify_postgres.py`
+- `src/hellas_dataops/api/__init__.py`
+- `src/hellas_dataops/api/routes/__init__.py`
+- `tests/conftest.py`
+- `tests/integration/conftest.py`
+
+Reports, builds, exported runtime requirements and fresh environments remain
+ignored. No secrets or local test target JSON are included.
+
+### Remaining boundaries and next step
+
+First obtain and review real PostgreSQL acceptance. Then prioritize a small
+synthetic end-to-end demonstration/runbook with measured query behavior and
+explicit operational configuration/security decisions. Live Open-Meteo access
+still needs separate service-term and operating-condition review; no API handler
+fetches upstream weather. Authentication, rate limiting, a read-only database role,
+TLS and production targeting remain prerequisites for a future hosted service,
+not implied by this localhost demonstration. Snapshot exports, connection pooling,
+schedulers, workers and additional infrastructure are optional future work.
+
+## SQLAlchemy pure-Python remediation
+
+2026-10-23: the native SQLAlchemy wheel failed with Windows Application Control
+rejecting `sqlalchemy.sql._cache_key_cy`. The same failure was reproduced in
+Codex before any database call. Distribution metadata showed SQLAlchemy 2.1.6,
+`Root-Is-Purelib: false`, `cp314-cp314-win_amd64`, and eight `.pyd` files.
+The previous host runner imported storage/SQLAlchemy before entering its main
+reporting block, explaining why no new report was produced for that failure.
+No Docker operation is needed to diagnose or repair this installation.
+
+### Supported build policy
+
+The official [SQLAlchemy source-build option](https://docs.sqlalchemy.org/en/21/intro.html#building-the-cython-extensions)
+is `DISABLE_SQLALCHEMY_CEXT=1`. It affects building, not an already installed wheel.
+The [uv settings reference](https://docs.astral.sh/uv/reference/settings/)
+documents `no-binary-package` and `extra-build-variables`. The installed uv 0.13.4
+accepts both, and actual installations verified their effect:
+
+```toml
+[tool.uv]
+no-binary-package = ["sqlalchemy"]
+extra-build-variables = { sqlalchemy = { DISABLE_SQLALCHEMY_CEXT = "1" } }
+```
+
+This is a deliberately small project-wide policy for SQLAlchemy only, rather
+than another platform-specific requirements file or driver framework. It applies
+to the project's uv sync and uv pip installation workflows on every platform.
+Only Windows x64/Python 3.14.4 was tested. Other native dependencies are unchanged;
+this does not claim the entire environment is pure Python. SQLAlchemy optional
+acceleration is lost; no performance difference has been measured.
+
+The first forced source rebuild used a new ignored
+`.tools/sqlalchemy-pure-cache-v1` cache, preventing reuse of any earlier native
+wheel or compiled source build. The official 2.1.6 source archive is pinned by
+hash in the unchanged uv.lock. Its setup.py contains the supported build flag.
+The same policy was then built and verified in the normal `.uv-cache`, so the
+host preflight can operate offline. uv replaced whole distributions normally;
+no `.pyd` file was manually removed and no SQLAlchemy implementation was patched.
+
+Actual source build requirements resolved setuptools 84.2.1 and Cython 3.3.0
+inside transient isolated build environments. They were not installed in the
+application environment. These upstream build-tool resolutions are not runtime
+lockfile pins; byte-for-byte reproducible SQLAlchemy wheel builds are not claimed.
+The project's own build backend stays locked to setuptools 84.2.0.
+
+### Commands and installed-build evidence
+
+From project root, with the documented project-local TEMP/TMP settings:
+
+```powershell
+$env:UV_CACHE_DIR = Join-Path $PWD '.tools/sqlalchemy-pure-cache-v1'
+$env:UV_PYTHON_DOWNLOADS = 'never'
+$env:UV_LINK_MODE = 'copy'
+& .\.tools\uv\bin\uv.exe sync --locked --no-binary-package sqlalchemy --reinstall-package sqlalchemy --python .venv/Scripts/python.exe
+& .\.venv\Scripts\python.exe -I -B scripts/verify_sqlalchemy.py
+# Prepare the normal cache once, using the same source-build policy:
+$env:UV_CACHE_DIR = Join-Path $PWD '.uv-cache'
+& .\.tools\uv\bin\uv.exe sync --locked --no-binary-package sqlalchemy --reinstall-package sqlalchemy --python .venv/Scripts/python.exe
+# Verify host preflight can replace the package without network access:
+& .\.tools\uv\bin\uv.exe sync --locked --offline --no-binary-package sqlalchemy --reinstall-package sqlalchemy --python .venv/Scripts/python.exe
+& .\.venv\Scripts\python.exe -I -B scripts/verify_sqlalchemy.py
+# Ordinary future setup retains the compatible build:
+& .\.tools\uv\bin\uv.exe sync --locked --offline --python .venv/Scripts/python.exe
+```
+
+Every command above succeeded. Stop on nonzero LASTEXITCODE. The build variable
+comes from package-scoped uv configuration; no global or runtime-only environment
+change is needed. `--reinstall-package` replaces an existing native installation;
+`--no-binary-package` selects the source build, while `--locked` preserves resolved
+versions. The normal cache now contains the verified pure build. A cold machine
+needs the online setup step for source/build requirements before offline use.
+
+The probe checks the actual distribution in the active virtual environment,
+pure wheel metadata, all physical files for native components and all eight
+extension-capable modules' implementations. It then imports Core, Alembic and
+the pg8000 dialect and compiles a parameterized SELECT without opening a database.
+Its sanitized result is:
+
+```json
+{"sqlalchemy":"2.1.6","pure_python":true,"native_files":0,"python_extension_modules":8,"wheel_tag":"py3-none-any","installation":"active-virtual-environment","alembic":"1.20.0","pg8000":"1.31.5","dialect":"pg8000","status":"passed"}
+```
+
+Version-specific internal inspection is diagnostic only; a future SQLAlchemy
+upgrade must review this probe. It does not modify internal modules or fabricate
+fallback imports. A regular pip install outside this project's uv configuration
+will not inherit the build policy from a published project wheel; use the
+repository setup instructions on policy-restricted hosts.
+
+### Runner and verification changes
+
+The PowerShell wrapper is unchanged. The Python runner is now importable using
+only the standard library. After branch/HEAD/path checks, it performs locked,
+offline synchronization with explicit SQLAlchemy source replacement, confines
+environment/cache/temp paths to the project, verifies dependency compatibility,
+and runs the isolated pure-build probe. Only then does it import storage and
+pg8000 and proceed to Docker. Failures are sanitized under `locked-environment`,
+`sqlalchemy-pure-python` or `pg8000-driver-import`. No resource is created when
+preflight fails. The report includes `sqlalchemy_build` on success. Existing
+Docker collision, ownership, database marker and localhost safeguards remain.
+
+**916 offline tests pass, zero failures**: all 909 prior tests plus seven new
+preflight cases. The new cases verify native-wheel/file rejection, actual pure
+installation, sanitized failures, runner import with SQLAlchemy blocked, and
+sync/probe failures stopping before Docker. The existing mocked workflow tests
+were adjusted for the additional preflight operations; database and application
+assertions were not weakened. Root socket/DNS blocking remains enabled.
+
+Application coverage remains **91.76% combined** (1222/1315 statements,
+348/396 branches); query module and API factory/models/routes remain 100% in the
+offline suite. Pure Python does not change the application source. SQLAlchemy
+third-party implementation coverage and real database correctness are not implied.
+Ruff lint/formatting and compatibility of 40 installed development packages pass.
+Offline lock checks, repeated sync and a byte-level comparison confirm uv.lock
+is unchanged by this remediation; all previously locked versions are preserved.
+Offline Alembic upgrade and downgrade SQL generation pass; revision
+`20261022_0001` and all schema/domain/API/ingestion source files are unchanged.
+The PostgreSQL suite still collects **133 tests**, with actual host execution
+pending. Migration SQL generation is not proof of real migration success.
+
+The rebuilt wheel and source distribution pass the distribution verifier:
+90 source assets (including three synthetic JSON fixtures and ten documentation
+files), 34 wheel modules and the Alembic template match the working tree. No
+forbidden generated or credential paths are packaged. Fresh, separate wheel and
+sdist environments each pass 45 isolated module imports, the pure SQLAlchemy
+probe, application smoke checks and dependency compatibility (27 runtime packages).
+Dependencies were installed from the unchanged hashed lock export using ordinary
+`uv pip sync --offline --require-hashes` from the repository root, confirming that
+the project build policy also applies to this uv installation path.
+
+```powershell
+& .\.tools\uv\bin\uv.exe build --offline --no-build-isolation --python .venv/Scripts/python.exe --out-dir dist/milestone-3d1-pure
+& .\.venv\Scripts\python.exe -I -B scripts/verify_distributions.py dist/milestone-3d1-pure
+& .\.tools\verify-3d1-pure-wheel\Scripts\python.exe -I -B scripts/verify_installed.py
+& .\.tools\verify-3d1-pure-sdist\Scripts\python.exe -I -B scripts/verify_installed.py
+```
+
+The final documentation-only update was followed by another distribution build
+and byte-for-byte asset check; it does not change the runtime code verified in
+those fresh installations.
+
+### Remediation file inventory
+
+Created: `scripts/verify_sqlalchemy.py`.
+
+Modified during this remediation:
+
+- `AGENTS.md`
+- `README.md`
+- `docs/development.md`
+- `docs/postgres-testing.md`
+- `pyproject.toml` (uv build policy only)
+- `scripts/verify_installed.py`
+- `scripts/verify_postgres.py`
+- `tests/unit/test_postgres_runner.py`
+
+All other uncommitted changes are the previously reviewed 3D.1 implementation.
+In particular, uv.lock was already modified for 3D.1 and did not change again.
+Ignored build logs, coverage and fresh environments remain local. No commit,
+security-policy change, unrelated resource access or live weather call occurred.
+
+### Required Windows-host verification
+
+Run the same single command in ordinary Windows PowerShell:
+
+```powershell
+& 'C:\Users\User\Documents\ChatGPT\hellas-dataops\scripts\verify-postgres.ps1'
+```
+
+The source build/import and all available offline checks now work in Codex.
+Windows host policy and actual PostgreSQL/API behavior still require the owner's
+execution. Do not declare 3D.1 accepted until its new sanitized report and all
+133 PostgreSQL results have passed normal acceptance review. No next milestone
+is authorized by this remediation.
+
+## Milestone 3D.1 final acceptance
+
+**MILESTONE 3D.1: ACCEPTED** on 2026-10-23. This record supersedes the historical
+pending-host statuses above. No application code, dependency version, schema or
+migration was changed during this acceptance review.
+
+### Host evidence and scope
+
+Reviewed `artifacts/postgres/hellas-dataops-test-e8c550622181/report.json`,
+`pytest.txt` and `coverage.json`. The report records `status=passed`,
+`stage=complete`, and `pytest_exit_code=0`; the captured output records
+**133 passed in 41.34 seconds**, with no failures or skips. This comprises 109
+existing PostgreSQL cases and 24 new API cases. The runner's successful complete
+path returns zero; a separate PowerShell process exit-code field is not recorded.
+
+| Evidence | SHA-256 |
+| --- | --- |
+| report.json | b1c2a97e0fbf6cf31f22ce6433e299e332bec49696dcaf8fdcf533164ad08eec |
+| pytest.txt | 9910113c99dc4ede8d6be4897287591870483b5e797ab16c9dc01d3409547347 |
+| coverage.json | 029dfafb39470515452f8dffa581952ad6de679cfdffe41b8c36f1407524825d |
+
+The actual server was **PostgreSQL 18.6 (Debian 18.6-1.pgdg12+2)** from
+`postgres:18.6-bookworm`. The report records Docker Server 29.7.2, Compose 5.4.0,
+the image ID, and the unique project identifier. The reviewed runner requires
+collision-free project-specific container/network/volume names, matching ownership
+labels, a healthy Linux container, a localhost-only binding (this run used port
+57380), the PostgreSQL 18 volume layout and a database ownership marker. Test
+connections verify the exact database/user, PostgreSQL major version and marker;
+the integration network guard permits only that explicit database port.
+
+Successful fixture setup proves fresh upgrade to `20261022_0001`, five application
+tables plus Alembic tracking, downgrade to base on empty application tables and
+re-upgrade. Teardown verifies empty application tables and the expected revision.
+The initial migration and accepted writer/domain/source implementations are
+unchanged from the previous checkpoint. No SQLite substitution is used.
+
+The reviewed commands only create and inspect resources belonging to this new
+test project; no delete, prune or unrelated resource mutation is present. The
+report records no resource removal. This is evidence about this runner, not an
+independent audit of all host activity or unrelated Docker projects. No Docker
+operation was executed from Codex during this review.
+
+Verified host dependency versions: SQLAlchemy 2.1.6, Alembic 1.20.0, pg8000 1.31.5,
+FastAPI 0.159.1, Uvicorn 0.54.0 and development-only httpx2 2.16.0. The host pure-build
+probe confirms SQLAlchemy `py3-none-any`, zero native files and eight Python
+extension implementations. CPython is 3.14.4 on Windows x64; project uv is 0.13.4.
+
+### API review and demonstrated behaviour
+
+- Application construction/import opens no database connection. Query methods
+  use scoped NullPool connections and read-only REPEATABLE READ transactions;
+  cleanup occurs on success and failure. No route invokes the weather client.
+- Core queries bind client values, resolve city/version/provider/dataset identity
+  explicitly and use the existing weather primary key. UTC intervals are hourly,
+  inclusive-start/exclusive-end, nonempty and at most 31 days. Pages default to
+  100, permit 1-500 and fetch at most limit + 1 rows.
+- PostgreSQL tests exercise timestamp ordering, exclusive-end filtering, keyset
+  traversal without duplicates/omissions on a static dataset, empty pages, city,
+  coordinate-version and dataset isolation, null/UTC JSON, and corrections
+  between pages. Later pages intentionally see newly committed corrections.
+- Liveness is database-independent. Readiness verifies ownership, revision,
+  columns/types/nullability and SELECT access. Host tests reject wrong ownership,
+  credentials and revision; offline tests additionally cover column defects.
+- Invalid parameters map to 422, unknown/unpersisted identities to 404, and
+  database failures to sanitized 503 responses. OpenAPI declares the actual
+  models, page limits and weather error responses. Arbitrary error inputs and
+  database diagnostics are not echoed. Unsupported write methods return 405.
+- Ordinary GET tests compare all five tables before and after requests. A real
+  attempted UPDATE inside the reader transaction is rejected by PostgreSQL.
+  This verifies API read-only behaviour, not a least-privilege database account.
+
+The existing `httpx2` dependency is intentional and remains development-only.
+Installed Starlette 1.9.0 metadata and TestClient implementation select httpx2;
+the old httpx fallback is deprecated there. Our fixtures use HTTPX2 AsyncClient
+and ASGITransport with proxy/environment trust disabled, so API tests run in
+process under the network guards. Its necessity is the in-process test transport,
+not runtime API serving or upstream ingestion. No replacement was warranted.
+
+### Quality and coverage
+
+The acceptance review reran **916 offline tests: zero failures**, in 3.70 seconds.
+This is the 837 accepted baseline, 72 API/query tests and seven dependency-preflight
+tests. Ruff lint and formatting pass (78 files). Offline uv lock verification
+passes (41 resolved entries), and all 40 installed development packages are
+compatible. Versions present at the previous checkpoint remain unchanged.
+
+| Measurement | Statements | Branches | Combined |
+| --- | --- | --- | --- |
+| Complete offline application suite | 1222/1315 | 348/396 | 91.76% |
+| Host storage/API/coordinator suite | 666/743 | 149/200 | 86.43% |
+| Offline query service | 81/81 | 30/30 | 100% |
+| Offline API factory/models/routes | 74/74 | 4/4 | 100% |
+
+These coverage scopes differ and are not averaged. The host-only percentage
+includes the uninvoked API launcher and validation/defensive paths exercised
+offline. Comparing missing-line sets leaves the API module-entry exit and existing
+storage guards for invalid chunk state, conflicting reconstructed run plan and
+invalid/completed failure marking uncovered in both runs. This comparison is not
+a merged coverage measurement. No untested normal API query path was found.
+Coverage is not proof against all race conditions or operational failures.
+
+Wheel and source packaging were rebuilt under `dist/acceptance-3d1` and passed
+the existing verifier: 90 source assets, three synthetic JSON fixtures, ten
+documentation files, 34 runtime modules and the Alembic template. No forbidden
+paths were packaged. Two new isolated environments each installed hashed locked
+runtime requirements and the wheel or sdist offline, passed 45 isolated module
+imports, pure-SQLAlchemy/OpenAPI/migration smoke checks and compatibility checks
+for all 27 runtime packages. No editable/source-path fallback was used.
+
+Acceptance commands (project-local cache/TEMP/TMP and disabled pytest plugin
+autoload as documented above):
+
+```powershell
+& .\.venv\Scripts\python.exe -I -B -m pytest -q -p no:cacheprovider -p pytest_cov --cov=src/hellas_dataops --cov-branch --cov-report=term --cov-report=json:artifacts/acceptance-3d1/offline-coverage.json
+& .\.venv\Scripts\ruff.exe check .
+& .\.venv\Scripts\ruff.exe format --check .
+& .\.tools\uv\bin\uv.exe lock --check --offline
+& .\.tools\uv\bin\uv.exe pip check --offline --python .venv/Scripts/python.exe
+& .\.venv\Scripts\python.exe -I -B scripts/verify_sqlalchemy.py
+& .\.tools\uv\bin\uv.exe build --offline --no-build-isolation --python .venv/Scripts/python.exe --out-dir dist/acceptance-3d1
+& .\.venv\Scripts\python.exe -I -B scripts/verify_distributions.py dist/acceptance-3d1
+& .\.tools\uv\bin\uv.exe export --locked --offline --no-dev --no-emit-project --format requirements-txt --output-file .tools/runtime-requirements-acceptance-3d1.txt
+```
+
+Each fresh environment used `uv venv --offline --python .venv/Scripts/python.exe`,
+`uv pip sync --offline --require-hashes --python <fresh-python>` with that export,
+then `uv pip install --offline --no-deps --python <fresh-python> <archive>` and
+`<fresh-python> -I -B scripts/verify_installed.py`. Environments were
+`.tools/acceptance-3d1-wheel` and `.tools/acceptance-3d1-sdist`. Native exit codes
+were checked after each command. Final documentation-only edits were followed
+by rebuilding and verifying archive contents; runtime code was unchanged.
+
+### Reviewed checkpoint inventory
+
+25 changed paths: **10 created and 15 modified**. No deletions, staged changes,
+schema changes or new migration. The review found no credentials, personal email,
+generated dataset or unexpected artifact in the intended commit. The one absolute
+Windows command in the historical remediation uses the owner's specified generic
+workspace path, not a secret. Local reports, caches, target configuration and
+checkpoint helpers remain ignored by Git.
+
+Created:
+
+- `docs/api.md`
+- `scripts/verify_sqlalchemy.py`
+- `src/hellas_dataops/api/__main__.py`
+- `src/hellas_dataops/api/app.py`
+- `src/hellas_dataops/api/models.py`
+- `src/hellas_dataops/api/routes/read.py`
+- `src/hellas_dataops/storage/queries.py`
+- `tests/integration/test_api_postgres.py`
+- `tests/unit/test_api.py`
+- `tests/unit/test_queries.py`
+
+Modified:
+
+- `AGENTS.md`
+- `README.md`
+- `docs/architecture.md`
+- `docs/data-contract.md`
+- `docs/development.md`
+- `docs/postgres-testing.md`
+- `pyproject.toml`
+- `scripts/verify_installed.py`
+- `scripts/verify_postgres.py`
+- `src/hellas_dataops/api/__init__.py`
+- `src/hellas_dataops/api/routes/__init__.py`
+- `tests/conftest.py`
+- `tests/integration/conftest.py`
+- `tests/unit/test_postgres_runner.py`
+- `uv.lock`
+
+The owner-side `artifacts/checkpoint-3d1.ps1` verifies main at
+`9d4c4b037eaa13e2fff42cce77a1fcf0505e9de1`, all 91 repository file hashes, this exact
+25-path change inventory, three host evidence hashes, approved noreply identities,
+an initially empty index and staged blob/mode consistency. It stages only the
+reviewed paths and creates one local commit with message
+`feat: add read-only FastAPI weather queries`, then verifies parent, contents,
+identity and a clean working tree. `-ReviewOnly` performs no staging or commit.
+No sandbox Git metadata write, escalation, push or publication is part of this review.
+The host verification runner deliberately retains its old HEAD gate: after the
+checkpoint, review it under the next authorized scope before rerunning tests.
+
+### Remaining limits and recommended next milestone
+
+Acceptance covers a local synthetic, read-only API. It does not prove live Uvicorn
+socket serving, browser CDN availability, sustained load, production deployment,
+crash recovery or a whole-request deadline. PostgreSQL statement/lock and driver
+socket timeouts are not a total HTTP deadline. Readiness does not audit every
+constraint on each request. Catalog listing assumes a small registry.
+
+Separate pages do not share a snapshot; corrections and late inserts can alter
+traversal results. There is no authentication, TLS, rate limiting or dedicated
+read-only database role. The disposable account has test write privileges, and
+retained Docker resources consume disk/memory. The SQLAlchemy pure build has not
+been performance-benchmarked; cold setup needs cached source/build prerequisites
+for subsequent offline use. No real provider access or terms approval is implied.
+
+Recommend **Milestone 3D.2: reproducible synthetic end-to-end demonstration**:
+one guarded runbook from synthetic ingestion CLI to the existing PostgreSQL
+database and loopback Uvicorn API; endpoint/OpenAPI smoke tests; pagination checks
+and measured warm/cold local query latency with dataset size, environment, sample
+count and p50/p95 clearly recorded. Reuse existing infrastructure and retain
+resources for inspection. Portfolio presentation and reproducible evidence are
+the goal; no new endpoints, scheduler, cache or cloud service are needed.
+Live Open-Meteo access remains separately gated. This next milestone is not started.

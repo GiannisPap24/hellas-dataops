@@ -7,10 +7,14 @@ monolith for reliable historical weather ingestion, PostgreSQL storage, and a
 FastAPI query interface. Work exclusively in this repository. Do not inspect,
 copy, or modify other projects. Use English for code and documentation.
 
-Milestone 3C.1 is **ACCEPTED** after 109 host PostgreSQL tests and 837 offline tests.
-Current authorized scope is acceptance documentation and preparation of an
-owner-run, reviewed local Git checkpoint script. Do not write Git metadata from
-the sandbox, push, perform live weather requests, or begin another milestone.
+Milestone 3D.1 is **ACCEPTED** after 133 host PostgreSQL tests and 916 offline
+tests. Its previous checkpoint is `9d4c4b037eaa13e2fff42cce77a1fcf0505e9de1`.
+Current authorized scope is acceptance documentation and preparation of a guarded,
+owner-run local checkpoint script. Do not write Git metadata from the sandbox,
+push, perform live weather requests, or begin another milestone.
+API handlers must only read stored data using bounded,
+parameterized Core queries and the verified disposable configuration. Keep
+liveness independent of PostgreSQL and sanitize readiness/query failures.
 Keep source retrieval outside database transactions. Operational commands must
 remain synthetic-only and use the verified disposable target. Preserve the
 initial migration and existing domain/source interfaces. Run receipts and weather
@@ -22,7 +26,7 @@ The application workflow joins these components, validates full retrieval chunks
 then retains and validates requested hours. SQLAlchemy Core tables and an initial
 offline Alembic migration define the storage contract. Guarded execution against
 new disposable test databases is authorized. Persistence uses SQLAlchemy Core and
-pg8000 without changing the accepted schema. Live weather calls and API endpoints
+pg8000 without changing the accepted schema. Live weather calls and write API endpoints
 remain outside scope. See the final 3B.2 acceptance record in docs/development.md
 for demonstrated guarantees, coverage gaps and operational limitations.
 Obtain explicit approval before starting the next milestone. User instructions
@@ -34,6 +38,15 @@ The sandbox cannot access Docker's named pipe; do not retry escalation or change
 permissions. Native Psycopg was rejected by Application Control and is replaced
 by the approved pure-Python pg8000 driver. Never bypass security policy or claim
 database validation succeeded before the real host tests pass.
+SQLAlchemy 2.1.6 must use its supported pure-Python source build. The project uv
+policy selects no binary SQLAlchemy wheel and supplies DISABLE_SQLALCHEMY_CEXT=1
+at build time. Do not patch installed packages, remove individual native files,
+or change Application Control. Run scripts/verify_sqlalchemy.py with Python -I
+to verify the actual installed build before database operations. The host runner
+must remain importable without SQLAlchemy so dependency failures are reported
+before any Docker operation. This compatibility remediation does not authorize
+application/schema changes or the next milestone.
+
 Use project-local uv and
 the locked `.venv`. Keep tooling,
 caches, and temporary build environments inside this repository. Do not install or switch
