@@ -1,103 +1,66 @@
-# Portfolio release handoff
+# Public GitHub publication record
 
-Prepared 2026-10-24. The owner approved **MIT**, **Copyright (c) 2026 GiannisPap24**,
-and one reviewed local checkpoint. **Public repository creation and push are
-not authorized yet.** None of the publication steps below has been executed.
+**Published on 2026-10-24:** [GiannisPap24/hellas-dataops](https://github.com/GiannisPap24/hellas-dataops).
+The owner explicitly approved public repository creation and publication under
+**MIT**, **Copyright (c) 2026 GiannisPap24**. Publication is complete.
 
-## Local release scope
+## Published checkpoint and scope
 
-The accepted synthetic MVP and its contracts remain unchanged. The outstanding
-final-audit changes are included, plus the MIT licence, package metadata,
-licence-distribution verification and this handoff. No dependency version,
-database schema, migration, API or weather-source behaviour changes.
-The accepted 133-test PostgreSQL result and fresh 168-hour real HTTP demo remain
-historical evidence; no expensive host tests are repeated for this metadata change.
+- Initial published main commit: `4d46fba4576dbed17e3b55894711dc3c3510061a`.
+- Commit message: `chore: prepare MIT-licensed portfolio release`.
+- Parent: `652aba66b980e97330cdfc2a372515d03b95f0a3`.
+- Repository visibility: public; default branch: main.
+- Local origin: `https://github.com/GiannisPap24/hellas-dataops.git`.
+- Initial publication: main only, with no force push, tags or other branches.
+
+The initial commit is a fixed publication checkpoint, not a claim that later
+main commits have the same hash. Preserve the full accepted history: guarded
+host runners require the documented checkpoint ancestry. The old local checkpoint
+script and first-publication procedure are completed preparation records, not
+steps to rerun against the existing public repository.
+
+The accepted synthetic MVP and its contracts remain unchanged. The release
+includes the final audit changes, MIT licence, package metadata and documentation.
+It introduces no dependency, schema, migration, API or weather-source changes.
+The 133-test PostgreSQL result and 168-hour real HTTP synthetic demo remain
+previously accepted evidence; neither was rerun during publication.
 See [release readiness](release-readiness.md), [setup](setup.md),
 [demo evidence](demo.md#final-acceptance-fresh-host-demonstration) and
 [third-party notices](licensing.md).
 
-The README presents Python/SQLAlchemy Core, PostgreSQL, FastAPI and Docker;
-UTC validation, atomic chunks, replay, explicit resume, bounded read queries,
-synthetic-only execution, local benchmark methodology and limitations.
-The operational CLI never enables live provider access. MIT does not override
-Open-Meteo service terms or data attribution requirements.
+Public source availability does not enable a hosted service or live weather
+access. The operational CLI remains synthetic-only. Production security,
+whole-request deadlines and process-crash recovery remain documented limitations.
+MIT does not override Open-Meteo service terms or data attribution requirements.
 
-## Local checkpoint
+## Completed publication verification
 
-From the existing checkout in ordinary Windows PowerShell:
+1. Verified the clean local main checkout and full release commit above.
+   GitHub CLI and connector both identified the authenticated account as GiannisPap24.
+2. Confirmed destination absence, then created one empty public repository with
+   the requested description and no generated README, licence or .gitignore.
+3. Added origin to the reviewed local repository and pushed only main using an
+   explicit branch refspec with automatic tag following disabled.
+4. Verified unauthenticated public API access and exact matching of the commit,
+   all 106 file paths/modes/hashes and 16 documentation files. README and LICENSE
+   contents matched byte-for-byte; GitHub detected MIT with the approved copyright.
+   Browser inspection confirmed README and Mermaid diagram rendering.
+5. Confirmed a clean local working tree tracking origin/main, one remote branch
+   (main) and no tags. No GitHub Release or hosted deployment was created.
 
-```powershell
-& .\artifacts\checkpoint-portfolio-release.ps1 -ReviewOnly
-& .\artifacts\checkpoint-portfolio-release.ps1
-```
+The final secret/privacy review covered **10 reachable commits and 205 unique
+historical file versions**. No high-confidence secret was identified. Four path
+matches in older documentation were generic Windows User-directory examples.
+All commit authors and committers use the approved GitHub noreply identity.
+Generated data, raw reports, target configurations, credentials, logs, local
+builds and environments were absent from the published inventory. Synthetic
+fixtures remain deliberately versioned. This review is not proof that every
+possible security or privacy issue is absent.
 
-The first command is read-only. The second creates one local commit only after
-checking expected main/HEAD, every reviewed repository file and hash, exact
-changed/staged inventories, approved noreply author/committer, Git overrides,
-hooks/filters and staged diff. It never pushes or changes Git identity/settings.
-Any mismatch stops execution. Do not replace these commands with `git add .`.
-The script and manifest are ignored local artifacts; no credentials are included.
-If the script is blocked by host policy, retain current files and request review;
-do not change execution policy or filesystem permissions.
-
-Expected parent: `652aba66b980e97330cdfc2a372515d03b95f0a3`.
-Commit message: `chore: prepare MIT-licensed portfolio release`.
-Record the resulting full commit hash and require a clean working tree before
-considering publication. Do not squash away the accepted ancestor: guarded
-host runners require the documented full-history lineage.
-
-## Publication steps: only after separate owner approval
-
-1. Run the local checkpoint and review its clean-status result. Recheck that the
-   source inventory contains no local reports, target configurations or datasets.
-   Publish the already reviewed documentation summaries, not the artifacts folder.
-2. Sign into GitHub as **GiannisPap24**. Open the **New repository** page, select
-   owner **GiannisPap24**, name **hellas-dataops**, and visibility **Public** only
-   after approval. If that name already exists, stop and review it; never overwrite
-   or delete an existing repository.
-3. Use the description below. Leave initialization with README, .gitignore and
-   licence **off**: this checkout already supplies all three. Do not choose a
-   template or add unrelated files. Create the empty repository.
-4. In ordinary PowerShell at the existing local checkout, run the guarded sequence
-   below after inserting the full checkpoint hash printed by the script.
-   It adds a remote only when none exists and pushes only main, without tags,
-   force, mirror or all-branch options. If any prerequisite fails, stop; do not
-   overwrite existing remote configuration or force-push.
-
-```powershell
-$releaseCommit = '<full hash printed by the local checkpoint>'
-if ($releaseCommit -notmatch '^[0-9a-f]{40}$') { throw 'Set the reviewed release commit first' }
-if ((git branch --show-current) -ne 'main' -or $LASTEXITCODE -ne 0) { throw 'Expected main' }
-if ((git rev-parse HEAD) -ne $releaseCommit -or $LASTEXITCODE -ne 0) { throw 'Release HEAD mismatch' }
-$changes = @(git status --porcelain=v1 --untracked-files=all)
-if ($LASTEXITCODE -ne 0 -or $changes.Count) { throw 'Working tree must be clean' }
-$remotes = @(git remote)
-if ($LASTEXITCODE -ne 0 -or $remotes.Count) { throw 'Existing remote requires review; nothing changed' }
-$approved = 'GiannisPap24 <260315283+GiannisPap24@users.noreply.github.com>'
-foreach ($format in @('%an <%ae>', '%cn <%ce>')) {
-    $identity = git log -1 "--format=$format"
-    if ($LASTEXITCODE -ne 0 -or $identity -cne $approved) { throw 'Checkpoint identity mismatch' }
-}
-git remote add origin 'https://github.com/GiannisPap24/hellas-dataops.git'
-if ($LASTEXITCODE -ne 0) { throw 'Remote creation failed' }
-$destination = git remote get-url --push origin
-if ($LASTEXITCODE -ne 0 -or $destination -cne 'https://github.com/GiannisPap24/hellas-dataops.git') { throw 'Unexpected push destination' }
-# This is the publication operation; execute only with separate approval.
-git -c push.followTags=false push --set-upstream origin refs/heads/main:refs/heads/main
-if ($LASTEXITCODE -ne 0) { throw 'Push failed; inspect without force or automatic retry' }
-```
-
-5. Use GitHub's normal authentication flow; never paste a token into repository
-   files, command URLs or screenshots. Inspect the public repository: expected
-   commit, main default branch, README/diagram rendering, MIT detection, docs links,
-   synthetic attribution and no generated/private files. Add topics and pin the
-   repository to the profile if desired. Do not create a release tag, upload
-   artifacts, enable hosting or authorize live weather access as a side effect.
-
-Reference: [GitHub repository creation](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-new-repository)
-and [importing existing local code](https://docs.github.com/en/migrations/importing-source-code/using-the-command-line-to-import-source-code/adding-locally-hosted-code-to-github).
-No GitHub account, repository availability, remote or authentication was accessed
-or verified during local preparation; verify those at the authorized handoff.
+Immediately before publication, **974 offline tests passed in 2.24 seconds**,
+with zero failures; Ruff lint and formatting passed. Local documentation targets,
+ignore-rule probes and Git object integrity checks passed. No other repository,
+Docker resource or security policy was modified.
 
 ## Suggested profile presentation
 
@@ -113,9 +76,10 @@ traffic or production-scale performance. Known local/Windows, timeout, process-c
 and pagination-snapshot limitations remain documented; none was removed by licensing.
 
 
-## Final preparation verification
+## Historical local preparation verification
 
-Executed on 2026-10-24 with the existing Windows x64 / Python 3.14.4 environment:
+The following checks were executed during preparation on 2026-10-24 with the
+existing Windows x64 / Python 3.14.4 environment, before the publication checks above:
 
 - **974 offline tests passed, zero failed**, in 2.59 seconds. Network protections
   remain enabled; PostgreSQL and demo tests were not rerun.
@@ -136,12 +100,12 @@ Executed on 2026-10-24 with the existing Windows x64 / Python 3.14.4 environment
   author/committer identities use the approved noreply address. Ignore checks pass.
   This does not establish the absence of all security or privacy issues.
 
-The checkpoint script's read-only validation and PowerShell parser must pass
-before handoff. Normal Git writes are unavailable because the sandbox explicitly
-mounts this repository's `.git` read-only. No escalation or trial metadata write
-is attempted. Owner execution is the remaining local checkpoint step.
+During preparation, Git metadata was read-only in that environment. The guarded
+checkpoint script passed read-only and PowerShell syntax validation; the local
+checkpoint was subsequently completed and verified before publication. These
+historical environment limits are not a remaining publication blocker.
 
-## Exact intended checkpoint inventory
+## Initial release checkpoint inventory
 
 Relative to `652aba66b980e97330cdfc2a372515d03b95f0a3`: **21 files**, comprising
 the 14 reviewed audit files and seven additional affected paths for licensing
@@ -176,5 +140,5 @@ Modified (16):
 
 The guarded script and manifest are additional **ignored local artifacts**, not
 commit candidates. Build outputs, environments, test reports and ownership
-configuration also remain ignored. No public release tag, remote or deployment
-has been created.
+configuration also remain ignored. The public repository and origin remote now
+exist; no release tag or hosted deployment was created by publication.

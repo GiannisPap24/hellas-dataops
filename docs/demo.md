@@ -140,11 +140,12 @@ with doubles. Real PostgreSQL/Uvicorn execution is explicitly opt-in via this
 script, separate from normal pytest. The existing 133-test PostgreSQL suite can
 still be run with `scripts/verify-postgres.ps1` against a different fresh database.
 
-After successful host review, prepare the local checkpoint and a concise portfolio
-evidence summary. Review repository licence, attribution and secret hygiene before
-any separately authorized publication. Live weather access, security hardening
-for hosting and production roles remain separately gated; no new infrastructure
-is needed to present this demonstration.
+Host review, the release checkpoint, licence/attribution review and public-history
+checks are complete. The project was published on 2026-10-24 at
+[GiannisPap24/hellas-dataops](https://github.com/GiannisPap24/hellas-dataops);
+see the [publication record](publication.md). Live weather access, security
+hardening for hosting and production roles remain separately gated; no new
+infrastructure is needed to present this demonstration.
 
 ## Startup remediation and VS Code (2026-10-23)
 

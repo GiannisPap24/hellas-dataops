@@ -1,8 +1,11 @@
 # Development and historical verification records
 
 Current setup: [setup.md](setup.md). Current audit and release decisions:
-[release-readiness.md](release-readiness.md). The chronological records below
-retain historical commands, counts and checkpoint decisions; they are not all
+[release-readiness.md](release-readiness.md). The project is public at
+[GiannisPap24/hellas-dataops](https://github.com/GiannisPap24/hellas-dataops);
+see the [publication record](publication.md) for the completed 2026-10-24 release.
+The chronological records below retain historical commands, counts and checkpoint
+decisions; they are not all
 current setup instructions. Use the linked current runbooks first.
 
 # Development and verification
@@ -2451,9 +2454,34 @@ hashed offline `pip sync`, `pip install --no-deps`, isolated `verify_installed.p
 and `pip check` sequence as the audit. Outputs remain under ignored
 `artifacts/portfolio-release/`.
 
-The intended local checkpoint has 21 reviewed paths (five new, 16 modified),
-listed in [publication.md](publication.md). Git metadata is sandbox read-only;
-prepare and validate `artifacts/checkpoint-portfolio-release.ps1` and its hashed
-manifest for the owner's normal PowerShell session. No Git write, push, tag,
-remote creation, Docker operation or weather request occurs during preparation.
-Public GitHub publication still requires a separate explicit instruction.
+At preparation time, the intended local checkpoint contained 21 reviewed paths
+(five new, 16 modified), listed in [publication.md](publication.md). Git metadata
+was read-only in that environment, so a guarded checkpoint script and hashed
+manifest were prepared for the owner's normal PowerShell session. Preparation
+itself did not create a commit, remote or publication. The checkpoint and separate
+publication authorization were subsequently completed as recorded below.
+
+## Public GitHub publication (2026-10-24)
+
+With explicit owner approval, the project was published at
+[GiannisPap24/hellas-dataops](https://github.com/GiannisPap24/hellas-dataops).
+The initial public main commit is `4d46fba4576dbed17e3b55894711dc3c3510061a`
+(`chore: prepare MIT-licensed portfolio release`). This supersedes earlier
+pending-checkpoint, licence-decision and publication-approval statements in
+these historical records.
+
+GitHub identity GiannisPap24 and destination absence were verified before creating
+one empty public repository. The reviewed local repository was connected as origin;
+only main was pushed, without force, tags or additional branches. Verification
+through the unauthenticated GitHub API matched all 106 file paths, modes and hashes,
+including 16 documentation files, README and the MIT licence. Browser inspection
+confirmed README and Mermaid rendering.
+
+The final history/privacy review covered 10 commits and 205 historical file
+versions. No high-confidence secret was found; generic Windows User paths in
+older examples were retained. All authors/committers use the approved noreply
+identity. Generated data, reports, logs and local credentials were not published.
+Offline pytest passed **974 tests in 2.24 seconds**; Ruff lint and formatting passed.
+The 133 PostgreSQL tests and synthetic HTTP demo were not rerun. Docker resources,
+security policies, runtime code, dependency versions and uv.lock were unchanged.
+See [publication.md](publication.md) for the publication scope and evidence.

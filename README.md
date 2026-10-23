@@ -5,8 +5,9 @@ persist it reliably in PostgreSQL, and query it through a read-only FastAPI API.
 The project demonstrates explicit data contracts, idempotent transactional
 writes, durable progress and deliberate resume after failure.
 
-**Status:** the local synthetic end-to-end MVP is accepted. The demonstration
-runs the actual ingestion CLI, PostgreSQL, Uvicorn and HTTP API. Open-Meteo
+**Status:** the accepted synthetic end-to-end MVP is publicly available on
+[GitHub](https://github.com/GiannisPap24/hellas-dataops) under the MIT licence.
+The demonstration runs the actual ingestion CLI, PostgreSQL, Uvicorn and HTTP API. Open-Meteo
 request planning, transport and normalization are implemented and tested with
 synthetic responses; **live weather ingestion has not been verified or enabled
 in the operational CLI**. This is not a publicly deployed service.
@@ -138,6 +139,7 @@ Copyright (c) 2026 GiannisPap24. Third-party dependencies retain their own
 licences. The code licence does not grant access to Open-Meteo services or
 relicense provider data; see [attribution and service restrictions](docs/licensing.md).
 
-The next release step is the [publication handoff](docs/publication.md),
-not additional infrastructure. No public repository, deployment or live-data
-permission is implied by local acceptance. Engineering rules: [AGENTS.md](AGENTS.md).
+Public GitHub publication was completed on 2026-10-24; see the
+[publication record](docs/publication.md) for the initial commit and verification.
+Hosted deployment and live weather ingestion remain outside the accepted scope.
+Engineering rules: [AGENTS.md](AGENTS.md).

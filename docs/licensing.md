@@ -9,7 +9,9 @@ and copyright notice when copying or redistributing the software.
 
 This decision covers this project's own code and documentation. Third-party
 software and provider data retain their own terms. It does not authorize live
-API use, change a dependency licence, or imply public deployment/publication.
+API use, change a dependency licence, or imply a hosted deployment. Public
+GitHub publication was separately authorized and completed on 2026-10-24;
+see the [publication record](publication.md).
 The repository contains synthetic fixtures, not redistributed real weather data.
 The audit considered Apache-2.0 as an alternative; the owner selected MIT.
 Authoritative text: [Open Source Initiative MIT](https://opensource.org/license/mit).

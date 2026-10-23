@@ -3,12 +3,15 @@
 Audit date: 2026-10-23. Starting checkout: `main`,
 `652aba66b980e97330cdfc2a372515d03b95f0a3`, clean. Scope: the accepted local
 **synthetic portfolio MVP**, not production deployment or the still-gated
-five-city/year-2025 real-data goal. No commit or publication is performed.
+five-city/year-2025 real-data goal. No commit or publication was performed during
+that audit; the findings and measurements below retain their original scope.
 
-Release preparation on 2026-10-24 resolves the licence decision: MIT,
-Copyright (c) 2026 GiannisPap24. The local checkpoint is authorized; sandbox Git
-metadata is read-only, so a guarded owner-side script is prepared. Publication
-remains separately gated. See [the publication handoff](publication.md).
+**Current status (2026-10-24): published.** The owner approved MIT,
+Copyright (c) 2026 GiannisPap24, and separately authorized public GitHub publication.
+The release checkpoint `4d46fba4576dbed17e3b55894711dc3c3510061a` was published to
+main at [GiannisPap24/hellas-dataops](https://github.com/GiannisPap24/hellas-dataops).
+See the [publication record](publication.md) for the completed checks. Hosted
+deployment and live weather ingestion remain outside this release scope.
 
 ## Prioritized findings
 
@@ -48,7 +51,7 @@ remains separately gated. See [the publication handoff](publication.md).
   is privileged, credentials are local ignored files, and transport is local
   without TLS. Those choices are not production security configuration.
 
-The history review inspected all **nine reachable commits and 184 unique blobs**,
+The original audit's history review inspected **nine reachable commits and 184 unique blobs**,
 plus current tracked files, ignore rules and distribution boundaries. Pattern
 checks covered private keys, common token formats, credential URLs, email-like
 strings, local user paths and private IPs. No high-confidence secret or personal
@@ -63,7 +66,7 @@ An OSV version query for **40 locked third-party PyPI packages** returned no kno
 advisories at audit time. Local evidence: `artifacts/final-audit/osv-query.json`.
 This is not a full vulnerability assessment, exploitability analysis, Docker
 image scan or proof that vulnerabilities/secrets do not exist. Review advisories
-again near publication; do not upgrade packages blindly merely because newer
+for future dependency updates; do not upgrade packages blindly merely because newer
 versions exist. Lock hashes constrain dependency selection but do not guarantee
 source trust or bit-for-bit reproducible builds. SQLAlchemy source-build isolation
 can resolve its own build requirements; those are not all pinned by the application
@@ -128,7 +131,7 @@ is finalized after fresh-install checks, then distributions are rebuilt/content
 checked; runtime code is identical. No claim of a cache-free Windows setup,
 byte-identical archives, fresh PostgreSQL run or fresh benchmark is made.
 
-## Publication checklist
+## Completed publication checklist (2026-10-24)
 
 - [x] Concise English README, accurate architecture and API examples.
 - [x] Synthetic/live-data and local/production boundaries explicit.
@@ -138,15 +141,21 @@ byte-identical archives, fresh PostgreSQL run or fresh benchmark is made.
 - [x] VS Code uses workspace-relative interpreter/tasks, no automatic Docker.
 - [x] Owner selected MIT and approved Copyright (c) 2026 GiannisPap24.
 - [x] Add MIT LICENSE and matching package metadata; verify packaged licence and notices.
-- [ ] Review the final diff and any evidence selected for publication. Do not upload
-      the entire artifacts tree or target configuration; publish only sanitized
-      summaries. Historical raw reports remain local, so public readers currently
-      see documented evidence and a reproducible runner, not independently hosted logs.
-- [ ] Create an explicitly authorized local release checkpoint after final review.
-- [ ] Separately authorize repository creation/visibility and push. Check GitHub
-      identity and destination at that time; no publication is authorized by this audit.
+- [x] Reviewed the final diff, 10 reachable commits, 205 historical file versions
+      and 106 published files. No high-confidence secret was identified; generic
+      Windows user-directory examples remain in historical commits. Raw reports,
+      target configurations and generated data remain local and ignored.
+- [x] Created the approved release checkpoint
+      `4d46fba4576dbed17e3b55894711dc3c3510061a` after final review.
+- [x] Received explicit publication approval, verified GiannisPap24 and destination
+      absence, created the empty public repository and pushed only main without
+      force, tags or additional branches.
+- [x] Verified unauthenticated public access, matching commit and all 106 file
+      paths/modes/hashes, README/diagram rendering, 16 docs and GitHub MIT detection.
+- [x] Reran 974 offline tests, lint and formatting successfully before publication.
+      The 133 PostgreSQL tests and synthetic demo remain previously accepted evidence.
 
-Suggested repository description: **Reliable weather data engineering in Python:
+Published repository description: **Reliable weather data engineering in Python:
 validated ingestion, resumable PostgreSQL persistence and read-only FastAPI,
 with a reproducible synthetic demo.**
 

@@ -10,11 +10,16 @@ copy, or modify other projects. Use English for code and documentation.
 Milestone 3D.1 is **ACCEPTED** after 133 host PostgreSQL tests and 916 offline
 tests. Its checkpoint is `231058887e9e8c3bb20a5c0484679b0276bc47b4`.
 Milestone 3D.2 is **ACCEPTED** after the fresh host demonstration
-`hellas-dataops-test-dbccaf1157c8` and 972 offline tests. Current scope is final local portfolio release preparation: approved MIT licence
-(Copyright (c) 2026 GiannisPap24), package verification, documentation and a
-reviewed local checkpoint. No new features or public publication are authorized.
-Git metadata remains read-only in the sandbox; prepare a guarded host checkpoint
-script without escalation. The demonstration reuses the existing CLI,
+`hellas-dataops-test-dbccaf1157c8` and 972 offline tests. Final release checks
+passed 974 offline tests. The MIT-licensed project (Copyright (c) 2026 GiannisPap24)
+was published with explicit owner approval on 2026-10-24 at
+https://github.com/GiannisPap24/hellas-dataops. The initial published commit is
+`4d46fba4576dbed17e3b55894711dc3c3510061a`; see docs/publication.md.
+Current authorized scope is updating publication-status documentation and
+committing and pushing those reviewed changes to main in this repository.
+Preserve the accepted history; push only main without force or tags. No new
+features, hosted deployment or live weather access are authorized by this update.
+The demonstration reuses the existing CLI,
 guarded PostgreSQL and real loopback Uvicorn HTTP. Keep the shared ownership
 guards; do not introduce alternative persistence or source implementations.
 The VS Code workspace is configured; graphical debugger interaction is unverified.
@@ -22,8 +27,9 @@ Keep host-only tasks explicit. The Windows demo child must own the actual
 interpreter process (not the venv redirector) and retain project .venv identity.
 Record sanitized startup diagnostics; never log raw exceptions or credentials.
 Stop only the API child launched by the demo, retain Docker resources, and never
-claim a small local benchmark proves production scalability. Do not write Git metadata from the sandbox,
-push, perform live weather requests, or begin another milestone.
+claim a small local benchmark proves production scalability. Respect actual
+environment permissions without escalation or security-policy changes. Do not
+perform live weather requests or begin another milestone without authorization.
 API handlers must only read stored data using bounded,
 parameterized Core queries and the verified disposable configuration. Keep
 liveness independent of PostgreSQL and sanitize readiness/query failures.
