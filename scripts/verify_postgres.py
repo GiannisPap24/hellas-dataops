@@ -10,7 +10,8 @@ import sys
 import uuid
 from pathlib import Path
 
-BASELINE = "231058887e9e8c3bb20a5c0484679b0276bc47b4"
+# An accepted ancestor identifies this repository without expiring on each commit.
+BASELINE = "652aba66b980e97330cdfc2a372515d03b95f0a3"
 IMAGE = "postgres:18.6-bookworm"
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -50,10 +51,12 @@ def verify_repository():
         raise RunnerError("Wrong repository root")
     if command([*git, "branch", "--show-current"]) != "main":
         raise RunnerError("Expected main branch")
-    if command([*git, "rev-parse", "HEAD"]) != BASELINE:
+    try:
+        command([*git, "merge-base", "--is-ancestor", BASELINE, "HEAD"])
+    except RunnerError:
         raise RunnerError(
-            "Checkpoint changed; review the host runner baseline before use"
-        )
+            "Accepted checkpoint ancestry unavailable; use this repository's full history on main"
+        ) from None
     status = command([*git, "status", "--porcelain=v1", "-z", "--untracked-files=all"])
     return [entry.lstrip() for entry in status.split("\0") if entry]
 
@@ -110,10 +113,17 @@ def main(*, workflow=None) -> int:
     directory = ROOT / ".tools" / "postgres" / project
     try:
         report["working_tree"] = verify_repository()
-        report["checkpoint"] = BASELINE
-        # Reviewed 3D.2 paths; accepted application/schema/dependencies stay unchanged.
+        report["accepted_ancestor"] = BASELINE
+        # Reviewed final-audit paths; accepted application/schema/dependencies stay unchanged.
         allowed = {
             ".gitignore",
+            ".env.example",
+            "LICENSE",
+            "MANIFEST.in",
+            "pyproject.toml",
+            "docs/publication.md",
+            "scripts/verify_distributions.py",
+            "scripts/verify_installed.py",
             ".vscode/settings.json",
             ".vscode/tasks.json",
             ".vscode/launch.json",
@@ -126,6 +136,11 @@ def main(*, workflow=None) -> int:
             "docs/development.md",
             "docs/postgres-testing.md",
             "docs/demo.md",
+            "docs/api.md",
+            "docs/data-contract.md",
+            "docs/setup.md",
+            "docs/licensing.md",
+            "docs/release-readiness.md",
             "scripts/demo.ps1",
             "scripts/demo.py",
             "scripts/verify_postgres.py",
@@ -139,6 +154,9 @@ def main(*, workflow=None) -> int:
             raise RunnerError(
                 "Unexpected project changes; review before database execution"
             )
+        report["checkpoint"] = command(
+            ["git", "--no-optional-locks", "rev-parse", "HEAD"]
+        )
         report["stage"] = "locked-environment"
         env = {
             k: v

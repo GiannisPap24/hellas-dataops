@@ -82,6 +82,13 @@ def main() -> None:
             raise RuntimeError(f"{name} was imported outside this environment")
 
     distribution = importlib.metadata.distribution("hellas-dataops")
+    if distribution.metadata.get("License-Expression") != "MIT":
+        raise RuntimeError("Installed project must declare MIT")
+    if distribution.metadata.get_all("License-File") != ["LICENSE"]:
+        raise RuntimeError("Installed project must include LICENSE")
+    license_text = distribution.read_text("licenses/LICENSE") or ""
+    if "Copyright (c) 2026 GiannisPap24" not in license_text:
+        raise RuntimeError("Installed licence must include the approved notice")
     # Dialect construction imports the selected DBAPI without opening a connection.
     from sqlalchemy.dialects.postgresql.pg8000 import PGDialect_pg8000
 

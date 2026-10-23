@@ -133,10 +133,10 @@ def test_command_success(runner, monkeypatch):
 
 @pytest.mark.parametrize(
     "bad_index,value",
-    [(0, "C:/not-this-repository"), (1, "other-branch"), (2, "other-commit")],
+    [(0, "C:/not-this-repository"), (1, "other-branch")],
 )
 def test_repository_gate(runner, monkeypatch, bad_index, value):
-    outputs = [str(runner.ROOT), "main", runner.BASELINE]
+    outputs = [str(runner.ROOT), "main"]
     outputs[bad_index] = value
     monkeypatch.setattr(runner, "command", MagicMock(side_effect=outputs))
     with pytest.raises(runner.RunnerError):
@@ -147,7 +147,7 @@ def test_status_retains_all_modified_filenames(runner, monkeypatch):
     outputs = [
         str(runner.ROOT),
         "main",
-        runner.BASELINE,
+        "",  # Successful ancestry check has no output.
         " M README.md\0?? scripts/verify_postgres.py\0",
     ]
     monkeypatch.setattr(runner, "command", MagicMock(side_effect=outputs))
@@ -186,13 +186,13 @@ def test_driver_import_failure_stops_before_docker(runner, monkeypatch, tmp_path
 
     monkeypatch.setattr(runner, "ROOT", tmp_path)
     monkeypatch.setattr(runner, "verify_repository", lambda: [])
-    calls = MagicMock(side_effect=["", "", "", '{"status":"passed"}'])
+    calls = MagicMock(side_effect=[runner.BASELINE, "", "", "", '{"status":"passed"}'])
     monkeypatch.setattr(runner, "command", calls)
     monkeypatch.setitem(sys.modules, "pg8000", None)
     assert runner.main() == 1
     assert (
-        len(calls.call_args_list) == 4
-    )  # Lock, sync, compatibility, pure-build probe.
+        len(calls.call_args_list) == 5
+    )  # Actual HEAD, lock, sync, compatibility, pure-build probe.
     assert all("docker" not in call.args[0] for call in calls.call_args_list)
     report_path = next((tmp_path / "artifacts/postgres").rglob("report.json"))
     assert json.loads(report_path.read_text())["stage"] == "pg8000-driver-import"
@@ -225,6 +225,8 @@ def test_host_workflow_with_mocked_processes(
 
     def command(args, **kwargs):
         calls.append(args)
+        if "rev-parse" in args and "HEAD" in args:
+            return "a" * 40  # A later reviewed commit, not the ancestry anchor.
         if "--show-toplevel" in args:
             return str(tmp_path)
         if any(str(arg).endswith("verify_sqlalchemy.py") for arg in args):
@@ -272,6 +274,8 @@ def test_host_workflow_with_mocked_processes(
     report_path = next((tmp_path / "artifacts" / category).rglob("report.json"))
     report = json.loads(report_path.read_text())
     assert report["status"] == ("failed" if failed else "passed")
+    assert report["checkpoint"] == "a" * 40
+    assert report["accepted_ancestor"] == runner.BASELINE
     assert "private value" not in report_path.read_text()
     assert len(workflow_calls) == int(not collision and workflow_mode != "tests")
     assert not any("prune" in c or "down" in c or "rm" in c for c in calls)
@@ -387,3 +391,46 @@ def test_probe_sanitizes_import_errors(pure_probe, monkeypatch, capsys):
     result = json.loads(capsys.readouterr().out)
     assert result["error_type"] == "ImportError"
     assert "private" not in result["error"]
+
+
+@pytest.mark.parametrize("exit_code", [1, 128])
+def test_unrelated_or_unavailable_history_is_rejected(runner, monkeypatch, exit_code):
+    calls = MagicMock(
+        side_effect=[
+            str(runner.ROOT),
+            "main",
+            runner.RunnerError("git failed", exit_code),
+        ]
+    )
+    monkeypatch.setattr(runner, "command", calls)
+    with pytest.raises(runner.RunnerError, match="ancestry unavailable"):
+        runner.verify_repository()
+    assert calls.call_args.args[0][-4:] == [
+        "merge-base",
+        "--is-ancestor",
+        runner.BASELINE,
+        "HEAD",
+    ]
+    assert not any("status" in call.args[0] for call in calls.call_args_list)
+
+
+def test_accepted_ancestry_keeps_repository_guards(runner, monkeypatch):
+    calls = []
+
+    def command(args):
+        calls.append(args)
+        if "--show-toplevel" in args:
+            return str(runner.ROOT)
+        if "--show-current" in args:
+            return "main"
+        if "merge-base" in args:
+            assert args[-3:] == ["--is-ancestor", runner.BASELINE, "HEAD"]
+            return ""  # Git returns zero for both the anchor and its descendants.
+        if "status" in args:
+            assert "--untracked-files=all" in args and "-z" in args
+            return ""
+        raise AssertionError(args)
+
+    monkeypatch.setattr(runner, "command", command)
+    assert runner.verify_repository() == []
+    assert len(calls) == 4

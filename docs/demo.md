@@ -30,10 +30,10 @@ if ($LASTEXITCODE -ne 0) { throw 'Dependency preflight failed' }
 & .\scripts\demo.ps1
 ```
 
-The single demonstration command from any directory is:
+The single demonstration command from the repository root is:
 
 ```powershell
-& 'C:\Users\User\Documents\ChatGPT\hellas-dataops\scripts\demo.ps1'
+& .\scripts\demo.ps1
 ```
 
 No command changes global settings or execution policy. If `.ps1` execution is
@@ -52,7 +52,7 @@ ERA5 label is configured dataset identity, not a claim of real provider data.
 
 The guarded workflow:
 
-1. Verify main at `231058887e9e8c3bb20a5c0484679b0276bc47b4`, reviewed paths,
+1. Verify main contains accepted ancestor `652aba66b980e97330cdfc2a372515d03b95f0a3`, reviewed paths,
    locked dependencies, pure SQLAlchemy, Docker Linux and resource ownership.
 2. Create a new uniquely named PostgreSQL environment using the existing Compose
    file, localhost-only port, PostgreSQL 18 volume layout and ignored credentials.
@@ -234,7 +234,8 @@ Swagger CDN rendering and VS Code graphical debugging were not verified.
 No unrelated-resource audit is implied: reviewed commands operated only on the
 fresh project prefix and performed no cleanup. Docker resources remain retained.
 
-The runner's Git gate remains pinned to the reviewed pre-checkpoint HEAD. It will
-refuse a later HEAD until its checkpoint policy is reviewed. Address portable
-clone/setup validation during the final portfolio audit; do not silently relax
-the guard or treat the local checkpoint as publication approval.
+The final audit replaces the expiring exact-HEAD gate with accepted ancestry:
+`main` must contain checkpoint `652aba66b980e97330cdfc2a372515d03b95f0a3`. Full
+history is required, dirty paths remain reviewed, and each report records actual
+HEAD separately from the anchor. This is repository identity, not approval of
+arbitrary later code. See [setup](setup.md) and [release review](release-readiness.md).

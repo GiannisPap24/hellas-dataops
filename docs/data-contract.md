@@ -482,7 +482,7 @@ may be null only for a measurement. Empty arrays fail nonempty interval coverage
 | Hourly array | Exact `hourly_units` value | Result |
 | --- | --- | --- |
 | `time` | `unixtime` | `HourlyObservation.timestamp_utc` |
-| `temperature_2m` | `Â°C` | `HourlyObservation.temperature_c` |
+| `temperature_2m` | `Ã‚Â°C` | `HourlyObservation.temperature_c` |
 | `relative_humidity_2m` | `%` | `HourlyObservation.relative_humidity_pct` |
 | `precipitation` | `mm` | `HourlyObservation.precipitation_mm` |
 | `wind_speed_10m` | `m/s` | `HourlyObservation.wind_speed_ms` |
@@ -712,7 +712,7 @@ For future actual-data distributions, include credit such as:
 
 Include working links to Open-Meteo, the source documentation, and CC BY 4.0.
 This attribution example must not imply that synthetic fixtures came from the
-provider. The repository's code licence remains a separate, unselected decision.
+provider. The repository's code uses the separately approved MIT licence; see [licensing](licensing.md).
 
 ## Official references
 

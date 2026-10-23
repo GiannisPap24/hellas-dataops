@@ -54,14 +54,19 @@ PostgreSQL 18.6 with 54 passing tests. Alembic uses the existing
 SQLAlchemy connection and needs no driver-specific migration changes.
 
 Use Windows x64 / CPython 3.14.4 with the existing local uv 0.13.4 and locked
-environment. The script verifies main at the accepted 3C.1 checkpoint
-`9d4c4b037eaa13e2fff42cce77a1fcf0505e9de1`. Only reviewed 3D.1/remediation paths may
-be modified/untracked; unexpected paths stop execution. The current suite
-collects 133 cases, including 24 new API tests, which still require a successful
-host run. The accepted prior 109-test evidence remains
-`artifacts/postgres/hellas-dataops-test-4a43cbabd8ba/report.json`; it is not evidence
-for the new API or pure-Python SQLAlchemy environment. Coverage includes storage,
-coordinator and API. The baseline must be reviewed after any future checkpoint.
+environment. The runner requires branch `main` and accepted checkpoint
+`652aba66b980e97330cdfc2a372515d03b95f0a3` as an ancestor of actual HEAD. It accepts
+reviewed descendants without an expiring exact-HEAD pin, records both values,
+and still rejects unrelated/missing history and unexpected dirty paths. Use a
+full-history checkout; see [setup](setup.md). This identifies project history;
+it does not authenticate or approve arbitrary later code.
+
+The current 133-case suite passed in the accepted host report
+`artifacts/postgres/hellas-dataops-test-e8c550622181/report.json` with exit zero,
+including all 24 API tests and the pure-Python SQLAlchemy environment. The final
+audit changes only runner preflight and documentation, so does not repeat this
+expensive database run or claim new database results. Coverage includes storage,
+coordinator and API.
 
 ## Infrastructure and preflight
 
@@ -209,18 +214,16 @@ this acceptance review.
 
 ## Milestone 3D.1 read-only API host verification
 
-The current runner recognizes accepted checkpoint
-`231058887e9e8c3bb20a5c0484679b0276bc47b4`, with an explicit reviewed changed-path
-allowlist. The PowerShell wrapper and Docker identity/ownership guards are
+The historical 3D.1 runner used an exact checkpoint gate; the current ancestry
+policy is documented above, retaining the reviewed changed-path allowlist. The PowerShell wrapper and Docker identity/ownership guards are
 unchanged; the Python runner now verifies the pure-Python SQLAlchemy build first. Run `& .\scripts\verify-postgres.ps1` from ordinary Windows
 PowerShell in this repository. The run now includes API query integration tests
 and API/storage coverage. The 109 earlier PostgreSQL passes are historical,
 not the sole evidence for the new API. The host run
 `hellas-dataops-test-e8c550622181` passed all 133 tests with pytest exit code zero
 on PostgreSQL 18.6. Milestone 3D.1 is accepted; see the final acceptance record in
-development.md. No Docker operation was attempted from the sandbox. After the
-owner's checkpoint, review the frozen runner HEAD gate in the next authorized
-milestone before using it again; do not weaken the checkpoint guard.
+development.md. No Docker operation was attempted from the sandbox. The final audit removes the obsolete exact-HEAD requirement without changing
+Docker or database target validation.
 
 The integration event loop initializes its Windows internal wake-up socket
 before the session network guard; ASGI requests then execute entirely in memory

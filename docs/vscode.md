@@ -1,9 +1,10 @@
 # VS Code workspace
 
-Open the existing checkout; do not move or duplicate it:
+From the existing checkout root after [setup](setup.md), open it without moving
+or duplicating files:
 
 ```powershell
-code --reuse-window 'C:\Users\User\Documents\ChatGPT\hellas-dataops'
+code --reuse-window .
 ```
 
 The launcher and extensions were found locally, but Codex's sandbox reported

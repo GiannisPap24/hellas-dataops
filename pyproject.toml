@@ -7,6 +7,8 @@ name = "hellas-dataops"
 version = "0.1.0.dev0"
 description = "A modular Python foundation for reliable Greek historical weather data workflows."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.14,<3.15"
 keywords = ["data-engineering", "weather", "postgresql", "fastapi", "portfolio"]
 classifiers = [

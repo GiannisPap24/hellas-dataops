@@ -7,6 +7,7 @@ Run from this repository root after building; uses only the standard library.
 import sys
 import tarfile
 import zipfile
+from email.parser import BytesParser
 from pathlib import Path, PurePosixPath
 
 
@@ -24,6 +25,7 @@ def main() -> None:
         Path(name)
         for name in (
             "AGENTS.md",
+            "LICENSE",
             "README.md",
             "pyproject.toml",
             "MANIFEST.in",
@@ -86,6 +88,13 @@ def main() -> None:
                 if stream.read() != (root / relative).read_bytes():
                     raise RuntimeError(f"Stale source asset: {relative}")
 
+        with archive.extractfile(f"{prefix}/PKG-INFO") as stream:
+            package_metadata = BytesParser().parsebytes(stream.read())
+        if package_metadata["License-Expression"] != "MIT" or package_metadata.get_all(
+            "License-File"
+        ) != ["LICENSE"]:
+            raise RuntimeError("Source metadata must declare MIT and LICENSE")
+
     source_files = sorted((root / "src/hellas_dataops").rglob("*.py"))
     with zipfile.ZipFile(wheels[0]) as archive:
         names = archive.namelist()
@@ -107,6 +116,14 @@ def main() -> None:
         (metadata_name,) = [
             name for name in names if name.endswith(".dist-info/METADATA")
         ]
+        package_metadata = BytesParser().parsebytes(archive.read(metadata_name))
+        if package_metadata["License-Expression"] != "MIT" or package_metadata.get_all(
+            "License-File"
+        ) != ["LICENSE"]:
+            raise RuntimeError("Wheel metadata must declare MIT and LICENSE")
+        license_name = metadata_name.removesuffix("METADATA") + "licenses/LICENSE"
+        if archive.read(license_name) != (root / "LICENSE").read_bytes():
+            raise RuntimeError("Wheel licence differs from approved LICENSE")
         if b"# Hellas DataOps" not in archive.read(metadata_name):
             raise RuntimeError("Wheel metadata must contain the project README")
 
@@ -118,6 +135,7 @@ def main() -> None:
     print(
         f"Verified {len(source_files)} wheel modules and Alembic template byte-for-byte; README present in wheel metadata"
     )
+    print("MIT metadata and approved LICENSE verified in both distributions")
     print("No forbidden cache, environment, raw-data, or credential paths found")
 
 

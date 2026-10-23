@@ -1,29 +1,14 @@
 # Architecture and implementation boundaries
 
-Status: accepted architectural direction. Repository foundation, configuration,
-and an isolated development environment were implemented through Milestone 1B.
-Milestone 2A adds canonical weather objects and pure validation. Milestone 2B
-adds pure Open-Meteo JSON normalization. Milestone 2C adds a versioned city
-registry and deterministic request planning. Milestone 2D adds a bounded HTTP
-client verified with offline transports; no live requests or database integration.
-Milestone 2E connects planning, retrieval, normalization, retention, and validation
-in an in-memory application workflow with explicit client injection.
-Milestone 3A adds five PostgreSQL Core tables and a packaged initial Alembic
-revision, tested through offline SQL generation only.
-Milestone 3B.1 adds guarded test connections and a host-assisted PostgreSQL
-verification workflow. It is accepted after 54 real PostgreSQL 18.6 tests passed,
-including upgrade/downgrade/re-upgrade, constraints, and pg8000 transactions.
-Milestone 3B.2 adds explicit mapping and transactional chunk persistence in
-`storage.mapping` and `storage.persistence`, accepted after 83 real PostgreSQL
-tests and 750 offline tests. This verifies the tested chunk and writer scenarios,
-not arbitrary crash recovery or an operational ingestion command.
-The storage service owns transactions; source retrieval stays outside them.
-See [persistence contracts](persistence.md) for locking, replay, correction and
-provenance decisions. Automated recovery remains unimplemented.
-Milestone 3C.1 implements explicit synthetic start/status/resume operations; its
-837 offline tests and 109 real PostgreSQL tests pass. Milestone 3C.1 is accepted.
-This document is a design contract, not a claim that the proposed pipeline is
-running.
+Current status: the local synthetic MVP is accepted through Milestone 3D.2.
+The actual ingestion CLI, PostgreSQL 18.6, Uvicorn and read-only FastAPI were
+verified together. Request planning, bounded Open-Meteo transport and strict
+normalization are implemented, but live provider access is unverified and remains
+disabled in the synthetic operational CLI. Five-city/year-2025 real ingestion
+is a separate future gate. See [the concise architecture](../README.md#architecture),
+[demo evidence](demo.md#final-acceptance-fresh-host-demonstration) and
+[the final audit](release-readiness.md). Historical milestone results remain in
+[development.md](development.md); the contracts below describe current code.
 
 ## Decisions
 
@@ -35,11 +20,10 @@ current implementation.
 
 The initial Python target is 3.14 because that interpreter is available locally.
 The current locked development dependencies and distributions have been tested
-on Windows x64 with Python 3.14.4. Other platforms, Python releases, and future
-HTTP/database dependencies remain untested. Broaden or change the supported
+on Windows x64 with Python 3.14.4. Other platforms and Python releases remain untested. Broaden or change the supported
 interpreter range only after verification.
 PostgreSQL 18.6 with the guarded official-image host workflow is verified through
-3C.1, including the new sequential lifecycle and explicit resume cases.
+3D.2, including persistence, explicit resume, read-only API and the real HTTP demo.
 
 ## Module dependencies
 
@@ -50,7 +34,7 @@ PostgreSQL 18.6 with the guarded official-image host workflow is verified throug
 | `storage` | Domain contracts, database libraries | SQL, mappings, transactions |
 | `ingestion` | Domain, source adapter, storage | Work planning and lifecycle |
 | `api` | Query services/storage, response schemas | HTTP request/response behaviour |
-| Future CLI | Configuration and ingestion | Operator inputs and exit codes |
+| CLI entry points | Configuration, ingestion or API | Synthetic start/status/resume and local API launch |
 
 Domain code must not import source, storage, ingestion, or API code. Keep provider
 payload shapes outside the canonical domain. Add interfaces only where testing
@@ -94,7 +78,7 @@ The returned frozen `NormalizedWeather` contains an ordered observation tuple
 and frozen `OpenMeteoMetadata`. Returned grid coordinates and optional elevation
 remain source metadata. The normalizer neither looks up nor replaces requested
 city coordinates. The planner now captures request coordinates and options;
-retrieval times and raw-response retention belong to future provenance work.
+retrieval times are persisted by the coordinator; raw-response retention remains future work.
 Caller-supplied dataset identity is
 not inferred from response fields and is not proof of upstream ERA5 selection.
 

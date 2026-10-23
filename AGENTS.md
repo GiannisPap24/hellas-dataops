@@ -10,9 +10,11 @@ copy, or modify other projects. Use English for code and documentation.
 Milestone 3D.1 is **ACCEPTED** after 133 host PostgreSQL tests and 916 offline
 tests. Its checkpoint is `231058887e9e8c3bb20a5c0484679b0276bc47b4`.
 Milestone 3D.2 is **ACCEPTED** after the fresh host demonstration
-`hellas-dataops-test-dbccaf1157c8` and 972 offline tests. Current scope is final
-acceptance documentation and an owner-executed local checkpoint only. No next
-milestone or publication is authorized. The demonstration reuses the existing CLI,
+`hellas-dataops-test-dbccaf1157c8` and 972 offline tests. Current scope is final local portfolio release preparation: approved MIT licence
+(Copyright (c) 2026 GiannisPap24), package verification, documentation and a
+reviewed local checkpoint. No new features or public publication are authorized.
+Git metadata remains read-only in the sandbox; prepare a guarded host checkpoint
+script without escalation. The demonstration reuses the existing CLI,
 guarded PostgreSQL and real loopback Uvicorn HTTP. Keep the shared ownership
 guards; do not introduce alternative persistence or source implementations.
 The VS Code workspace is configured; graphical debugger interaction is unverified.
@@ -54,8 +56,7 @@ at build time. Do not patch installed packages, remove individual native files,
 or change Application Control. Run scripts/verify_sqlalchemy.py with Python -I
 to verify the actual installed build before database operations. The host runner
 must remain importable without SQLAlchemy so dependency failures are reported
-before any Docker operation. This compatibility remediation does not authorize
-application/schema changes or the next milestone.
+before any Docker operation. Retain this installation policy during the final audit.
 
 Use project-local uv and
 the locked `.venv`. Keep tooling,

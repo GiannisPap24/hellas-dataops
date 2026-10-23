@@ -1,8 +1,8 @@
 # Read-only weather API
 
 Milestone 3D.1 is **ACCEPTED** after 916 offline tests and 133 real PostgreSQL
-tests (including 24 API cases). The local demonstration commands below remain a
-runbook, not evidence of a completed live Uvicorn demonstration. No schema, migration, canonical domain,
+tests (including 24 API cases). Milestone 3D.2 subsequently verified the real
+local Uvicorn demonstration; see [the actual evidence](demo.md#final-acceptance-fresh-host-demonstration). No schema, migration, canonical domain,
 ingestion or transactional writer changes are required.
 
 ## Endpoints
@@ -152,8 +152,8 @@ if ($null -ne $page.next_after) {
 Invoke-RestMethod 'http://127.0.0.1:8000/openapi.json'
 ```
 
-Ctrl-C stops only the local API. Containers/volumes are not deleted. The demo has
-not been run in the sandbox; it requires the owner's successful database tests.
+Ctrl-C stops only the local API. Containers/volumes are not deleted. The full
+demo was verified on the Windows host, separately from offline/API unit tests.
 The host runner deliberately creates a fresh database each invocation and never
 resets a retained demonstration database.
 

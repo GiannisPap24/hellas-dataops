@@ -1,3 +1,10 @@
+# Development and historical verification records
+
+Current setup: [setup.md](setup.md). Current audit and release decisions:
+[release-readiness.md](release-readiness.md). The chronological records below
+retain historical commands, counts and checkpoint decisions; they are not all
+current setup instructions. Use the linked current runbooks first.
+
 # Development and verification
 
 For the current accepted API and database verification, see
@@ -1889,7 +1896,7 @@ security-policy change, unrelated resource access or live weather call occurred.
 Run the same single command in ordinary Windows PowerShell:
 
 ```powershell
-& 'C:\Users\User\Documents\ChatGPT\hellas-dataops\scripts\verify-postgres.ps1'
+& .\scripts\verify-postgres.ps1
 ```
 
 The source build/import and all available offline checks now work in Codex.
@@ -2329,3 +2336,124 @@ release checkout. After this checkpoint, the current guard intentionally refuses
 a new HEAD. Do not silently relax it. Live Open-Meteo access, five-city/year-2025
 real backfill and public deployment remain separately gated. This is acceptance
 of the synthetic demonstration milestone, not the full real-data MVP.
+
+
+## Final MVP audit (2026-10-23)
+
+The accepted local synthetic MVP passes this scoped technical audit, subject to
+an owner licence decision and a final publication review. See
+[findings, evidence, limitations and exact 14-path inventory](release-readiness.md)
+and [licensing recommendations](licensing.md). No code licence, new feature,
+commit, Docker operation or publication was introduced.
+
+The confirmed P1 was the stale exact-HEAD gate. It now requires accepted
+`652aba66b980e97330cdfc2a372515d03b95f0a3` ancestry on main and preserves root,
+dirty-path, dependency and database/resource guards. Reports record actual HEAD
+separately. Missing/unrelated history still fails before Docker. Actual read-only
+Git preflight and focused regression tests pass. This is history identity, not
+an assertion that arbitrary descendant code has been reviewed. Full-history
+clones are required for host workflows; archives still support package tests.
+
+The fresh audit suite passed **974 tests in 4.20 seconds**, no failures, with
+network blocking retained. Ruff lint/format pass (85 files). Application coverage
+is 91.76% combined, runner 94.18%; see the detailed denominators and gaps in the
+audit report. Offline lock consistency and sync passed without lockfile changes;
+40 installed packages are compatible. Both distributions built and passed content
+verification (98 source assets, 34 runtime modules). Separate fresh wheel/sdist
+environments each passed 45 isolated imports and compatibility for 27 runtime
+packages. Documentation-only finalization was followed by rebuilding/content
+verification, without changing the runtime checked in those fresh environments.
+
+The 133-test PostgreSQL run and accepted 168-hour real Uvicorn demo were reviewed,
+not repeated. No application/schema/driver change justifies another expensive
+host run. The public-package OSV query returned no advisories for 40 locked
+third-party packages; that is a dated lookup, not a security guarantee. All nine
+reachable commits and 184 unique blobs were scanned for high-confidence secret
+patterns, with no secret identified. No personal email in history; Git identities
+use the approved noreply address. Ordinary source licence selection remains open.
+
+Commands executed from the repository root (native exit codes checked):
+
+```powershell
+$env:TEMP = Join-Path $PWD '.tools/tmp'
+$env:TMP = $env:TEMP
+$env:UV_CACHE_DIR = Join-Path $PWD '.uv-cache'
+$env:UV_PYTHON_DOWNLOADS = 'never'
+$env:UV_LINK_MODE = 'copy'
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = '1'
+& .\.venv\Scripts\python.exe -I -B -m pytest -q -p no:cacheprovider -p pytest_cov --cov=src/hellas_dataops --cov=scripts --cov-branch --cov-report=term --cov-report=json:artifacts/final-audit/coverage.json --junitxml=artifacts/final-audit/offline-tests.xml
+& .\.venv\Scripts\python.exe -I -B -m ruff check .
+& .\.venv\Scripts\python.exe -I -B -m ruff format --check .
+& .\.tools\uv\bin\uv.exe lock --check --offline
+& .\.tools\uv\bin\uv.exe sync --locked --offline --python .venv/Scripts/python.exe
+& .\.tools\uv\bin\uv.exe pip check --python .venv/Scripts/python.exe
+& .\.venv\Scripts\python.exe -I -B scripts/verify_sqlalchemy.py
+& .\.tools\uv\bin\uv.exe build --offline --no-build-isolation --python .venv/Scripts/python.exe --out-dir dist/final-audit
+& .\.venv\Scripts\python.exe -I -B scripts/verify_distributions.py dist/final-audit
+& .\.tools\uv\bin\uv.exe export --locked --offline --no-dev --no-emit-project --format requirements-txt --output-file .tools/runtime-requirements-final-audit.txt
+```
+
+For each of `.tools/verify-final-audit-wheel` and `.tools/verify-final-audit-sdist`,
+`uv venv --offline --python .venv/Scripts/python.exe <fresh-root>` created a new
+environment. Each used `uv pip sync --offline --require-hashes --python
+<fresh-python> .tools/runtime-requirements-final-audit.txt`, followed by
+`uv pip install --offline --no-deps --python <fresh-python> <archive>`,
+`<fresh-python> -I -B scripts/verify_installed.py`, and
+`uv pip check --offline --python <fresh-python>`. Runtime wheels came from the
+local cache; this is not evidence of a fresh-machine setup. The selected
+SQLAlchemy source policy and pure installation were checked in both environments.
+
+Current Windows setup lives in [setup.md](setup.md); the earlier long milestone
+records above remain historical. The README now presents the actual synthetic
+pipeline, guarantees, endpoints, demonstration and honest limitations concisely.
+Do not begin real-data ingestion or public deployment as part of release preparation.
+
+
+## Final local portfolio release preparation (2026-10-24)
+
+Owner approved MIT and `Copyright (c) 2026 GiannisPap24`. Root LICENSE,
+PEP 639 package metadata and source/wheel licence checks now reflect that decision.
+Third-party licences and Open-Meteo access/data distinctions remain separate.
+No dependency versions, schema, source or API behaviour changed. The approved
+14-file audit inventory matched all recorded hashes before these edits.
+
+The full offline suite passed **974 tests in 2.59 seconds**, zero failures.
+Ruff lint/format, offline lock check and locked synchronization pass; the lockfile
+hash is unchanged. Installed compatibility passes for 40 packages. Both archives
+build and pass the expanded verifier: 100 source assets, 3 JSON fixtures, 16 docs,
+34 runtime modules, migration template and exact MIT licence contents/metadata.
+Fresh wheel and sdist installations each pass 45 isolated imports and checks for
+27 compatible runtime packages, including pure-Python SQLAlchemy and the installed
+MIT notice. Final documentation-only changes are followed by rebuilding/content
+checks. These are cached local installations; other OS/fresh-machine setup is not
+newly verified. Previously accepted 133 PostgreSQL tests and the real HTTP demo
+were not repeated because application/database execution did not change.
+
+Commands use the same project-local temp/cache, no-managed-download and plugin
+isolation environment documented in setup.md:
+
+```powershell
+& .\.tools\uv\bin\uv.exe lock --check --offline
+& .\.tools\uv\bin\uv.exe sync --locked --offline --python .venv/Scripts/python.exe
+& .\.tools\uv\bin\uv.exe pip check --offline --python .venv/Scripts/python.exe
+& .\.venv\Scripts\python.exe -I -B scripts/verify_sqlalchemy.py
+& .\.venv\Scripts\python.exe -I -B -m pytest -q -p no:cacheprovider --junitxml=artifacts/portfolio-release/offline-tests.xml
+& .\.venv\Scripts\python.exe -I -B -m ruff check .
+& .\.venv\Scripts\python.exe -I -B -m ruff format --check .
+& .\.tools\uv\bin\uv.exe build --offline --no-build-isolation --python .venv/Scripts/python.exe --out-dir dist/portfolio-release
+& .\.venv\Scripts\python.exe -I -B scripts/verify_distributions.py dist/portfolio-release
+& .\.tools\uv\bin\uv.exe export --locked --offline --no-dev --no-emit-project --format requirements-txt --output-file .tools/runtime-requirements-portfolio-release.txt
+```
+
+Separate `.tools/verify-portfolio-release-wheel` and
+`.tools/verify-portfolio-release-sdist` environments used the same `uv venv`,
+hashed offline `pip sync`, `pip install --no-deps`, isolated `verify_installed.py`
+and `pip check` sequence as the audit. Outputs remain under ignored
+`artifacts/portfolio-release/`.
+
+The intended local checkpoint has 21 reviewed paths (five new, 16 modified),
+listed in [publication.md](publication.md). Git metadata is sandbox read-only;
+prepare and validate `artifacts/checkpoint-portfolio-release.ps1` and its hashed
+manifest for the owner's normal PowerShell session. No Git write, push, tag,
+remote creation, Docker operation or weather request occurs during preparation.
+Public GitHub publication still requires a separate explicit instruction.
