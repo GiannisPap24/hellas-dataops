@@ -2104,3 +2104,228 @@ count and p50/p95 clearly recorded. Reuse existing infrastructure and retain
 resources for inspection. Portfolio presentation and reproducible evidence are
 the goal; no new endpoints, scheduler, cache or cloud service are needed.
 Live Open-Meteo access remains separately gated. This next milestone is not started.
+
+## Milestone 3D.2 synthetic end-to-end demonstration
+
+Implementation and offline verification complete on 2026-10-23; **host execution
+and acceptance remain pending**. The clean starting baseline was main at
+`231058887e9e8c3bb20a5c0484679b0276bc47b4`. No Docker command, real database operation,
+live Uvicorn listener or benchmark was executed from Codex.
+
+Use [the concise demonstration runbook](demo.md). `scripts/demo.ps1` delegates to
+`scripts/demo.py`, which reuses the existing host provisioner's verified preflight,
+Compose and ownership checks. An internal callback selects the demonstration
+after provisioning; the existing PostgreSQL pytest workflow remains the default.
+The frozen HEAD and reviewed changed-path gate were updated to the accepted 3D.1
+checkpoint. All `src/` application code, schema/migrations, Compose configuration,
+pyproject dependencies and uv.lock remain byte-for-byte unchanged.
+
+The actual synthetic CLI is executed as a subprocess, then its JSON status and
+durable progress are cross-checked. A new identical run must report 168 unchanged
+rows and preserve weather/value-origin lineage; resume of the completed first
+run must preserve all state. The Uvicorn child uses the real application factory
+with one worker and an exclusively held loopback socket. The parent makes actual
+standard-library HTTP requests, verifies their canonical values against the
+existing synthetic adapter/domain pipeline, and checks all five tables for changes.
+The child is terminated by its owned process handle in a finally block; Docker
+resources are never automatically removed. No alternate writer or endpoint exists.
+
+The demonstration intentionally preserves the existing generator: 10 C temperature
+and null humidity/precipitation/wind. It exercises all four fields without changing
+accepted replay semantics or fabricating zero values. The dataset has 168 hours,
+one city/configuration/dataset and two successful ingestion runs after replay.
+Timing samples and HTTP outputs will be generated only by the actual host run.
+
+### Available verification
+
+- **968 offline tests pass, zero failures**: 916 regression cases plus 52 additional
+  orchestration/guard cases. Default socket/DNS blocking remains unchanged.
+- Demo helper: 225/228 statements and 22/24 branches, **98.02% combined**. Shared
+  host runner: 145/150 statements and 32/38 branches, **94.15% combined**.
+- Application coverage remains 1222/1315 statements and 348/396 branches,
+  **91.76% combined**. These scopes are reported separately; script mocks do not
+  establish real database, HTTP-serving, cleanup or latency results.
+- Ruff lint/formatting pass (81 files). Offline lock verification and locked sync
+  pass, as do compatibility checks for 40 installed development packages and the
+  pure-Python SQLAlchemy probe. No dependency versions changed.
+- PowerShell demonstration syntax and the host runner's read-only repository gate
+  pass. No Git metadata or Windows security configuration was changed.
+- Wheel and sdist builds pass: 94 source assets (three JSON fixtures, eleven docs),
+  34 runtime modules and the Alembic template verified byte-for-byte; no forbidden
+  paths. Fresh isolated wheel/sdist installations each pass 45 module imports,
+  pure-SQLAlchemy and installed application checks, and compatibility of 27 runtime
+  packages. Source scripts/runbook are included in the sdist, not the runtime wheel.
+
+Coverage gaps include transient readiness retry and executable module dispatch;
+real process termination/socket behaviour still needs host verification despite
+mocked ownership/cleanup coverage. Known limits include abrupt-parent termination,
+retained Docker resource consumption, small/warm dataset timings, per-operation
+timeouts rather than a hard HTTP deadline, and the accepted API security limits.
+
+Exact offline commands, with the documented project-local cache/TEMP/TMP settings
+and `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`:
+
+```powershell
+& .\.venv\Scripts\python.exe -I -B -m pytest -q -p no:cacheprovider -p pytest_cov --cov=src/hellas_dataops --cov=scripts --cov-branch --cov-report=term --cov-report=json:artifacts/milestone-3d2/coverage.json
+& .\.venv\Scripts\ruff.exe check .
+& .\.venv\Scripts\ruff.exe format --check .
+& .\.tools\uv\bin\uv.exe lock --check --offline
+& .\.tools\uv\bin\uv.exe sync --locked --offline --python .venv/Scripts/python.exe
+& .\.tools\uv\bin\uv.exe pip check --offline --python .venv/Scripts/python.exe
+& .\.venv\Scripts\python.exe -I -B scripts/verify_sqlalchemy.py
+& .\.tools\uv\bin\uv.exe build --offline --no-build-isolation --python .venv/Scripts/python.exe --out-dir dist/milestone-3d2
+& .\.venv\Scripts\python.exe -I -B scripts/verify_distributions.py dist/milestone-3d2
+& .\.tools\uv\bin\uv.exe export --locked --offline --no-dev --no-emit-project --format requirements-txt --output-file .tools/runtime-requirements-3d2.txt
+```
+
+Fresh environments `.tools/verify-3d2-wheel` and `.tools/verify-3d2-sdist` were
+created with `uv venv --offline --python .venv/Scripts/python.exe`. Each used
+`uv pip sync --offline --require-hashes --python <fresh-python>` with that export,
+`uv pip install --offline --no-deps --python <fresh-python> <archive>`, then
+`<fresh-python> -I -B scripts/verify_installed.py` and `uv pip check --offline`.
+Native exit codes were checked. Final documentation edits were followed by a
+rebuild/content check; runtime code was unchanged from the fresh-install checks.
+
+### File inventory
+
+Created: `docs/demo.md`, `scripts/demo.ps1`, `scripts/demo.py`,
+`tests/unit/test_demo.py`.
+
+Modified: `AGENTS.md`, `README.md`, `docs/architecture.md`, `docs/development.md`,
+`docs/postgres-testing.md`, `scripts/verify_postgres.py`,
+`tests/unit/test_postgres_runner.py`.
+
+No application, migration or dependency files changed. Reports and build artifacts
+remain ignored. No commit or push was created. The next action is the owner's
+single host command from demo.md, followed by review of its actual sanitized
+report and benchmark samples. Full acceptance, a checkpoint and any portfolio
+publication require that evidence and the appropriate separate authorization.
+
+### 3D.2 startup remediation and workspace verification
+
+The Windows venv redirector caused a reproducible PID mismatch in the demo
+startup guard. The child now uses CPython's Windows multiprocessing launch
+convention, retaining `.venv` identity while the owned process is the actual
+interpreter. PID checks and loopback binding remain strict. Sanitized child
+phase/exception and parent readiness/exit diagnostics replace the previous lack
+of useful failure details. No runtime application, schema, migration, dependency
+version or lockfile changed. See demo.md for the evidence and limits.
+
+The retained demo database was safely reachable over its verified localhost TCP
+port despite Docker's inaccessible named pipe. A separate **read-only real HTTP
+probe** passed all smoke checks and 60 measured requests, preserved all five
+tables, and verified API process termination plus listener closure. This does not
+replace a fresh full `scripts/demo.ps1` host run. No Docker resources were operated
+on; the 133-test PostgreSQL suite was not rerun.
+
+Offline verification: **972 passed, zero failed** (968 prior cases plus four
+new diagnostic/retry regressions), Ruff lint and formatting checks pass.
+Demo coverage: 290/291 statements, 27/30 branches (98.75% combined). The uncovered
+branches are logging without exception context and non-Windows/non-redirector
+launch; executable script exit remains outside pytest. Application combined
+coverage remains 91.76%. Offline lock check resolves 41 entries; compatibility
+checks pass for 40 installed packages. No network guard was relaxed.
+
+VS Code configuration is versioned under .vscode (four JSON files plus one
+credential-free testing.env). It uses the existing interpreter, offline pytest,
+Ruff and explicit host-only database/demo tasks. The API debug launch calls the
+accepted module, requiring a retained disposable configuration, on localhost.
+JSON syntax and task commands are checked locally; graphical editor/debugger
+execution is not verified because the launcher reported sandbox EPERM errors.
+The installed extension listing includes the official Codex extension; no extension
+or global setting was installed/changed. See vscode.md.
+
+Packaging after remediation: wheel and source builds pass; distribution inspection
+verifies 95 source assets, three synthetic JSON fixtures, twelve documentation
+files, 34 wheel modules and the migration template, with no private/generated
+paths. Fresh wheel and sdist installations each pass 45 isolated module imports,
+installed migration/API checks, the SQLAlchemy pure-Python probe and compatibility
+of 27 runtime packages. VS Code files are checkout configuration, not runtime
+package content. The workspace task definitions themselves were executed: 972
+offline tests, Ruff lint and Ruff format checks pass; the API module help and
+PowerShell syntax checks pass. Database/demo tasks remain explicitly host-invoked.
+
+Current baseline-relative inventory (18 paths): modified `.gitignore`, `AGENTS.md`,
+`README.md`, `docs/architecture.md`, `docs/development.md`, `docs/postgres-testing.md`,
+`scripts/verify_postgres.py`, `tests/unit/test_postgres_runner.py`; created
+`.vscode/settings.json`, `.vscode/tasks.json`, `.vscode/launch.json`,
+`.vscode/extensions.json`, `.vscode/testing.env`, `docs/demo.md`, `docs/vscode.md`,
+`scripts/demo.ps1`, `scripts/demo.py`, `tests/unit/test_demo.py`.
+No files are staged and no commit was made. The original 3D.2 artifacts and
+host report are preserved; new diagnostics and measurements remain ignored.
+
+
+## Milestone 3D.2 final acceptance
+
+**MILESTONE 3D.2: ACCEPTED** on 2026-10-23. Fresh host evidence:
+`artifacts/demo/hellas-dataops-test-dbccaf1157c8/report.json`, with
+`status=passed`, `stage=complete`, `api_process_stopped=true` and
+`read_only_verified=true`. The reviewed runner returns zero on this path; the
+report does not independently store a numeric top-level exit code. All 18
+working files matched the pre-host remediation hash inventory before this review's
+documentation updates. Runtime application and demo code were not changed by
+this acceptance review.
+
+The official PostgreSQL 18.6 instance was freshly provisioned with health,
+resource-label, localhost-only port and database ownership-marker validation.
+Migration `20261022_0001` succeeded. The real synthetic CLI ingested 168 Athens
+hours for `[2025-01-01,2025-01-08)` UTC. Run and chunk succeeded. A second run
+reported zero inserted/updated and 168 unchanged, retaining original weather
+lineage. Resume of the completed first run preserved every application table.
+
+Real Uvicorn/HTTP checks passed for liveness, readiness, cities, weather, nulls,
+UTC/exclusive-end boundaries, pagination (100+68), empty results, 404/422 inputs,
+Swagger HTML and OpenAPI JSON. The HTTP workload changed none of the five
+application tables. The owned interpreter process was stopped and had matched
+the listener PID; it owned the sole listener socket with one worker. A separate
+post-run TCP check from Codex timed out and provides no independent listener
+closure evidence. Do not mistake that inconclusive probe for a serving listener.
+The existing ownership/termination evidence supports cleanup acceptance; no
+abrupt-parent/process-crash cleanup guarantee is claimed.
+
+Fresh performance, recalculated from report samples:
+
+| Returned rows | Measured requests | Warm-ups | Concurrency | p50 ms | p95 ms | Body bytes | Errors |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 100 | 30 | 5 | 1 | 49.42 | 63.63 | 14,078 | 0 |
+| 168 | 30 | 5 | 1 | 59.62 | 62.95 | 23,308 | 0 |
+
+The first weather response took 43.38 ms. Both queries use the exact Athens
+seven-day URL in demo.md with limits 100/500. Measurements include new HTTP and
+database connections on a warm 168-row dataset; no load/capacity claim follows.
+Windows 11 AMD64, 16 logical CPUs, Python 3.14.4, PostgreSQL 18.6, pg8000 1.31.5,
+pure-Python SQLAlchemy 2.1.6, Alembic 1.20.0, FastAPI 0.159.1, Uvicorn 0.54.0;
+Docker Server 29.7.2 and Compose 5.4.0.
+
+Final review reran 972 offline tests: all passed in 4.34 seconds, no failures.
+This is 916 accepted 3D.1 regression cases plus 56 demo/runner cases. Coverage
+is 290/291 statements and 27/30 branches for demo.py (98.75% combined), and
+91.76% combined for application code. Ruff lint and formatting pass. Offline uv
+lock verification resolves 41 entries; installed compatibility checks pass for
+40 packages. The SQLAlchemy pure-Python probe passes. Coverage limitations remain
+the previously documented alternate-platform, logging and executable-dispatch
+paths; default tests still block external networking. The previously accepted
+133-test PostgreSQL suite was not rerun: this host report records a demonstration,
+not pytest.
+
+Workspace JSON, local interpreter paths, offline pytest, Ruff tasks and explicit
+host tasks were reviewed. API debugging uses the accepted localhost-only module
+and an explicit disposable target file. The owner reports `code --reuse-window`
+returned without CLI errors. Neither the graphical window nor debugger execution
+was independently observed. No credential, automatic Docker task or global
+editor/security change was introduced.
+
+The exact 18-path milestone inventory remains listed above. Documentation now
+records acceptance; no schema, migration, dependency, lockfile, domain or source
+contract changed. The intended checkpoint includes only reviewed source, tests,
+configuration and docs, not local environments, reports, credentials or datasets.
+The owner-side guarded checkpoint script is `artifacts/checkpoint-3d2.ps1`.
+
+Remaining release work: a focused technical/security audit; code licence and
+third-party attribution review; concise README/architecture evidence; public
+repository secret/history review; and a reviewed replacement/advance of the
+host runner's pinned pre-checkpoint HEAD policy so setup can work from the final
+release checkout. After this checkpoint, the current guard intentionally refuses
+a new HEAD. Do not silently relax it. Live Open-Meteo access, five-city/year-2025
+real backfill and public deployment remain separately gated. This is acceptance
+of the synthetic demonstration milestone, not the full real-data MVP.

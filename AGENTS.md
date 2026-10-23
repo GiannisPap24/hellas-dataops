@@ -8,9 +8,19 @@ FastAPI query interface. Work exclusively in this repository. Do not inspect,
 copy, or modify other projects. Use English for code and documentation.
 
 Milestone 3D.1 is **ACCEPTED** after 133 host PostgreSQL tests and 916 offline
-tests. Its previous checkpoint is `9d4c4b037eaa13e2fff42cce77a1fcf0505e9de1`.
-Current authorized scope is acceptance documentation and preparation of a guarded,
-owner-run local checkpoint script. Do not write Git metadata from the sandbox,
+tests. Its checkpoint is `231058887e9e8c3bb20a5c0484679b0276bc47b4`.
+Milestone 3D.2 is **ACCEPTED** after the fresh host demonstration
+`hellas-dataops-test-dbccaf1157c8` and 972 offline tests. Current scope is final
+acceptance documentation and an owner-executed local checkpoint only. No next
+milestone or publication is authorized. The demonstration reuses the existing CLI,
+guarded PostgreSQL and real loopback Uvicorn HTTP. Keep the shared ownership
+guards; do not introduce alternative persistence or source implementations.
+The VS Code workspace is configured; graphical debugger interaction is unverified.
+Keep host-only tasks explicit. The Windows demo child must own the actual
+interpreter process (not the venv redirector) and retain project .venv identity.
+Record sanitized startup diagnostics; never log raw exceptions or credentials.
+Stop only the API child launched by the demo, retain Docker resources, and never
+claim a small local benchmark proves production scalability. Do not write Git metadata from the sandbox,
 push, perform live weather requests, or begin another milestone.
 API handlers must only read stored data using bounded,
 parameterized Core queries and the verified disposable configuration. Keep

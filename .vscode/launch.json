@@ -1,0 +1,32 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Hellas: local synthetic database API",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "hellas_dataops.api",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "pythonArgs": [
+        "-I",
+        "-B"
+      ],
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--database-config",
+        "${input:databaseConfig}",
+        "--port",
+        "8000"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ],
+  "inputs": [
+    {
+      "id": "databaseConfig",
+      "type": "promptString",
+      "description": "Exact retained demo target.json path (no password; use the report project identifier)"
+    }
+  ]
+}

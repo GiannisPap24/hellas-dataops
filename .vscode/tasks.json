@@ -1,0 +1,101 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "process",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+          "TEMP": "${workspaceFolder}/.tools/tmp",
+          "TMP": "${workspaceFolder}/.tools/tmp"
+        }
+      },
+      "problemMatcher": [],
+      "label": "Hellas: offline tests",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "args": [
+        "-I",
+        "-B",
+        "-m",
+        "pytest",
+        "tests/unit",
+        "-q",
+        "-p",
+        "no:cacheprovider"
+      ]
+    },
+    {
+      "type": "process",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "label": "Hellas: Ruff lint",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "args": [
+        "-I",
+        "-B",
+        "-m",
+        "ruff",
+        "check",
+        "."
+      ]
+    },
+    {
+      "type": "process",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "label": "Hellas: Ruff format check",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "args": [
+        "-I",
+        "-B",
+        "-m",
+        "ruff",
+        "format",
+        "--check",
+        "."
+      ]
+    },
+    {
+      "label": "Hellas: Ruff quality checks",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Hellas: Ruff lint",
+        "Hellas: Ruff format check"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "type": "process",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "label": "Hellas: PostgreSQL verification (host, explicit)",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-File",
+        "${workspaceFolder}/scripts/verify-postgres.ps1"
+      ]
+    },
+    {
+      "type": "process",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "label": "Hellas: end-to-end demo (host, explicit)",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-File",
+        "${workspaceFolder}/scripts/demo.ps1"
+      ]
+    }
+  ]
+}

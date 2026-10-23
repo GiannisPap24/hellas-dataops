@@ -200,8 +200,9 @@ def test_driver_import_failure_stops_before_docker(runner, monkeypatch, tmp_path
 
 
 @pytest.mark.parametrize("collision", [False, True])
+@pytest.mark.parametrize("workflow_mode", ["tests", "demo", "demo_failure"])
 def test_host_workflow_with_mocked_processes(
-    runner, monkeypatch, tmp_path, container, target, collision
+    runner, monkeypatch, tmp_path, container, target, collision, workflow_mode
 ):
     """Exercise command order/reporting, not Docker or PostgreSQL behavior."""
     monkeypatch.setattr(runner, "ROOT", tmp_path)
@@ -252,18 +253,38 @@ def test_host_workflow_with_mocked_processes(
             stderr="",
         ),
     )
-    assert runner.main() == int(collision)
-    report_path = next((tmp_path / "artifacts/postgres").rglob("report.json"))
+    workflow_calls = []
+
+    def workflow(actual_target, config, env, report, directory):
+        workflow_calls.append(actual_target)
+        assert any("inspect" in c for c in calls)
+        assert actual_target == target and config.exists()
+        report["stage"] = "demo-synthetic-test"
+        if workflow_mode == "demo_failure":
+            raise RuntimeError("private value must not escape")
+        report["demo_verified"] = True
+
+    failed = collision or workflow_mode == "demo_failure"
+    assert runner.main(workflow=None if workflow_mode == "tests" else workflow) == int(
+        failed
+    )
+    category = "postgres" if workflow_mode == "tests" else "demo"
+    report_path = next((tmp_path / "artifacts" / category).rglob("report.json"))
     report = json.loads(report_path.read_text())
-    assert report["status"] == ("failed" if collision else "passed")
+    assert report["status"] == ("failed" if failed else "passed")
+    assert "private value" not in report_path.read_text()
+    assert len(workflow_calls) == int(not collision and workflow_mode != "tests")
     assert not any("prune" in c or "down" in c or "rm" in c for c in calls)
     if collision:
         assert report["stage"] == "resource-collision-check"
         assert not (tmp_path / ".tools/postgres").exists()
         assert (tmp_path / ".tools/tmp").is_dir()  # Only dependency-build temporaries.
-    else:
+    elif workflow_mode == "tests":
         assert report["pytest_exit_code"] == 0
         assert target.password not in (report_path.parent / "pytest.txt").read_text()
+    else:
+        assert "pytest_exit_code" not in report
+        assert not (report_path.parent / "pytest.txt").exists()
 
 
 @pytest.mark.parametrize("stage", ["sync", "probe"])

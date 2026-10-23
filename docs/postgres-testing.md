@@ -210,7 +210,7 @@ this acceptance review.
 ## Milestone 3D.1 read-only API host verification
 
 The current runner recognizes accepted checkpoint
-`9d4c4b037eaa13e2fff42cce77a1fcf0505e9de1`, with an explicit 3D.1 changed-path
+`231058887e9e8c3bb20a5c0484679b0276bc47b4`, with an explicit reviewed changed-path
 allowlist. The PowerShell wrapper and Docker identity/ownership guards are
 unchanged; the Python runner now verifies the pure-Python SQLAlchemy build first. Run `& .\scripts\verify-postgres.ps1` from ordinary Windows
 PowerShell in this repository. The run now includes API query integration tests
@@ -248,3 +248,15 @@ records this evidence under `sqlalchemy_build`. Raw native-loader diagnostics,
 paths and connection errors are not exposed by the runner. Detailed build and
 verification commands are in [development.md](development.md#sqlalchemy-pure-python-remediation).
 Only actual host test results can establish PostgreSQL/API acceptance.
+
+## Milestone 3D.2 demonstration
+
+The shared runner now accepts an internal demonstration callback after successful
+database resource ownership checks. Ordinary `verify-postgres.ps1` still runs the
+full opt-in PostgreSQL suite; `demo.ps1` instead performs the separate real
+CLI/Uvicorn/HTTP workflow. Its report is under `artifacts/demo/<project>/` and does
+not contain a fabricated pytest result. Both create new uniquely owned resources
+using the existing strict `hellas-dataops-test-<random>` namespace and never reuse
+a retained test or demonstration database. This preserves the accepted database
+identity contract. No database passwords or ownership markers enter reports.
+See [demo.md](demo.md) for the owner-side command and acceptance conditions.

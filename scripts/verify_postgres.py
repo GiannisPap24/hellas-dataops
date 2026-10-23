@@ -10,7 +10,7 @@ import sys
 import uuid
 from pathlib import Path
 
-BASELINE = "9d4c4b037eaa13e2fff42cce77a1fcf0505e9de1"
+BASELINE = "231058887e9e8c3bb20a5c0484679b0276bc47b4"
 IMAGE = "postgres:18.6-bookworm"
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -97,9 +97,9 @@ def verify_container(data, target):
     # built from this newly created local directory; do not compare VM path syntax.
 
 
-def main() -> int:
+def main(*, workflow=None) -> int:
     project = f"hellas-dataops-test-{uuid.uuid4().hex[:12]}"
-    report_dir = ROOT / "artifacts" / "postgres" / project
+    report_dir = ROOT / "artifacts" / ("demo" if workflow else "postgres") / project
     report_dir.mkdir(parents=True, exist_ok=False)
     report = {
         "project": project,
@@ -111,33 +111,26 @@ def main() -> int:
     try:
         report["working_tree"] = verify_repository()
         report["checkpoint"] = BASELINE
-        # Reviewed 3D.1 paths; no schema, source, or persistence changes.
+        # Reviewed 3D.2 paths; accepted application/schema/dependencies stay unchanged.
         allowed = {
+            ".gitignore",
+            ".vscode/settings.json",
+            ".vscode/tasks.json",
+            ".vscode/launch.json",
+            ".vscode/extensions.json",
+            ".vscode/testing.env",
+            "docs/vscode.md",
             "AGENTS.md",
             "README.md",
-            "pyproject.toml",
-            "uv.lock",
-            "docs/api.md",
             "docs/architecture.md",
-            "docs/data-contract.md",
             "docs/development.md",
             "docs/postgres-testing.md",
+            "docs/demo.md",
+            "scripts/demo.ps1",
+            "scripts/demo.py",
             "scripts/verify_postgres.py",
-            "scripts/verify_sqlalchemy.py",
+            "tests/unit/test_demo.py",
             "tests/unit/test_postgres_runner.py",
-            "scripts/verify_installed.py",
-            "src/hellas_dataops/api/app.py",
-            "src/hellas_dataops/api/__init__.py",
-            "src/hellas_dataops/api/routes/__init__.py",
-            "src/hellas_dataops/api/models.py",
-            "src/hellas_dataops/api/__main__.py",
-            "src/hellas_dataops/api/routes/read.py",
-            "src/hellas_dataops/storage/queries.py",
-            "tests/conftest.py",
-            "tests/integration/conftest.py",
-            "tests/integration/test_api_postgres.py",
-            "tests/unit/test_api.py",
-            "tests/unit/test_queries.py",
         }
         if any(
             line.split(" ", 1)[-1] not in allowed or line.startswith(("D ", "R ", "C "))
@@ -336,52 +329,55 @@ def main() -> int:
                 raise RunnerError("Resource ownership mismatch")
         report["image_id"] = data["Image"]
         report["port"] = port
-        report["stage"] = "postgres-integration-tests"
-        env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
-        # The explicit option is consumed by the integration plugin only.
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-I",
-                "-B",
-                "-m",
-                "pytest",
-                "-p",
-                "no:cacheprovider",
-                "-p",
-                "pytest_cov",
-                "tests/integration",
-                "--postgres-config",
-                str(config_file),
-                "--cov=src/hellas_dataops/storage",
-                "--cov=hellas_dataops.ingestion.coordinator",
-                "--cov=src/hellas_dataops/api",
-                "--cov-report=term-missing",
-                f"--cov-report=json:{report_dir / 'coverage.json'}",
-                "--tb=no",
-                "-q",
-            ],
-            cwd=ROOT,
-            env=env,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=300,
-        )
-        output = (
-            (result.stdout + result.stderr)
-            .replace(target.password, "[redacted]")
-            .replace(target.marker, "[redacted]")
-            .replace(str(ROOT), "<project>")
-        )
-        (report_dir / "pytest.txt").write_text(output, encoding="utf-8")
-        report["pytest_exit_code"] = result.returncode
-        print(output)
-        if result.returncode:
-            raise RunnerError(
-                "PostgreSQL integration tests failed; see sanitized pytest.txt"
+        if workflow is not None:
+            workflow(target, config_file, env, report, report_dir)
+        else:
+            report["stage"] = "postgres-integration-tests"
+            env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
+            # The explicit option is consumed by the integration plugin only.
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    "-B",
+                    "-m",
+                    "pytest",
+                    "-p",
+                    "no:cacheprovider",
+                    "-p",
+                    "pytest_cov",
+                    "tests/integration",
+                    "--postgres-config",
+                    str(config_file),
+                    "--cov=src/hellas_dataops/storage",
+                    "--cov=hellas_dataops.ingestion.coordinator",
+                    "--cov=src/hellas_dataops/api",
+                    "--cov-report=term-missing",
+                    f"--cov-report=json:{report_dir / 'coverage.json'}",
+                    "--tb=no",
+                    "-q",
+                ],
+                cwd=ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=300,
             )
+            output = (
+                (result.stdout + result.stderr)
+                .replace(target.password, "[redacted]")
+                .replace(target.marker, "[redacted]")
+                .replace(str(ROOT), "<project>")
+            )
+            (report_dir / "pytest.txt").write_text(output, encoding="utf-8")
+            report["pytest_exit_code"] = result.returncode
+            print(output)
+            if result.returncode:
+                raise RunnerError(
+                    "PostgreSQL integration tests failed; see sanitized pytest.txt"
+                )
         report["postgres_version"] = command(
             [
                 *docker,

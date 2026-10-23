@@ -10,9 +10,27 @@ deterministic testing, and measurable performance.
 
 ## Current status
 
-**Milestone 3D.1 ACCEPTED: 133 real PostgreSQL tests and 916 offline tests pass.**
-See the [final acceptance evidence](docs/development.md#milestone-3d1-final-acceptance).
+**Milestone 3D.2 ACCEPTED: a fresh synthetic end-to-end demonstration and 972 offline tests pass.**
+The previously accepted PostgreSQL integration suite has 133 passing tests; it was
+not rerun during this acceptance review. See the
+[verified demonstration evidence](docs/development.md#milestone-3d2-final-acceptance).
 See [API contracts and local demonstration](docs/api.md).
+Milestone 3D.2 adds a one-command **synthetic end-to-end demonstration**, verified
+on Windows with PostgreSQL 18.6. It runs the existing ingestion CLI, verifies 168 persisted
+hours and unchanged replay, serves the actual FastAPI app with Uvicorn, checks real
+HTTP responses and measures local latency. Fresh results and limitations are recorded
+in the runbook; all source measurements are synthetic.
+
+From ordinary Windows PowerShell with Docker Desktop running:
+
+```powershell
+& .\scripts\demo.ps1
+```
+
+See the concise [demonstration runbook](docs/demo.md) for locked setup, expected
+results, generated reports, API requests and benchmark limitations. The script
+creates a fresh isolated database, stops only its API child and retains Docker
+resources. It never calls Open-Meteo. All demonstration values are invented.
 Transactional chunk persistence, replay, correction and tested writer contention
 are verified on PostgreSQL 18.6. Milestone 3C.1 adds a synthetic-only sequential
 ingestion command and explicit resume, verified against PostgreSQL 18.6.
@@ -375,7 +393,7 @@ runs migration lifecycle and constraint tests, and writes a sanitized report und
 `artifacts/postgres/`. It never deletes volumes or touches other projects. Read
 [PostgreSQL testing](docs/postgres-testing.md) before execution, including driver
 policy failures and retained-resource limits. The runner recognizes the accepted 3C.1 checkpoint
-`9d4c4b037eaa13e2fff42cce77a1fcf0505e9de1` and includes new API query tests.
+`231058887e9e8c3bb20a5c0484679b0276bc47b4` and includes API query tests.
 All 133 PostgreSQL tests passed in the accepted host run; see [API verification](docs/api.md).
 After the local checkpoint, the frozen runner HEAD gate requires a deliberate
 review in the next authorized milestone before another database run.
@@ -413,11 +431,11 @@ or environment dumps; structured validation errors may still contain inputs.
 | 3B.2 | Transactional idempotent writes and rollback | ACCEPTED: 83 PostgreSQL tests and 750 offline tests pass |
 | 3C.1 | Sequential synthetic CLI ingestion, durable status and explicit resume | ACCEPTED: 837 offline tests and 109 PostgreSQL tests pass |
 | 3D.1 | Small read-only FastAPI layer, bounded queries, health/readiness and OpenAPI | ACCEPTED: 916 offline and 133 PostgreSQL tests pass |
+| 3D.2 | Synthetic CLI-to-PostgreSQL-to-real-HTTP demonstration and bounded measurements | ACCEPTED: fresh host demonstration and 972 offline tests pass |
 | 4 | Controlled live ingestion, operational configuration and full backfill | Separately gated; requires approval and service-terms review |
-| 6 | Controlled end-to-end demonstration, benchmarks, runbook, portfolio evidence | Planned |
 
-Docker Compose packaging, GitHub Actions, scheduling, and a second data source
-are later decisions. Kubernetes, Spark, microservices, and a custom frontend
+Disposable PostgreSQL already uses Docker Compose. GitHub Actions, scheduling
+and a second data source remain later decisions. Kubernetes, Spark, microservices, and a custom frontend
 are outside the current scope.
 
 ## Source terms and attribution
@@ -442,3 +460,11 @@ Read [AGENTS.md](AGENTS.md) before changes. Keep secrets, personal information,
 local databases, and generated data out of the repository. Document implemented
 behaviour accurately, and provide evidence for reliability and performance
 claims.
+
+Develop in the existing checkout with the [VS Code workspace guide](docs/vscode.md).
+The 3D.2 Windows launcher/PID defect has been corrected and real HTTP checks
+and the fresh full demonstration pass; see [the runbook](docs/demo.md).
+The host runner intentionally pins a reviewed Git checkpoint. After creating the
+3D.2 commit, its checkpoint policy needs review before another host run; it will
+fail safely at the repository check until then. Release preparation must address
+this limitation before claiming setup works from arbitrary public clones.

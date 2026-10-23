@@ -53,7 +53,12 @@ pgdata/
 
 # Editor and operating system files
 .idea/
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/testing.env
 .DS_Store
 Thumbs.db
 Desktop.ini

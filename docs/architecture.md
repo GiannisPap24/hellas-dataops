@@ -329,7 +329,7 @@ and do not establish live-provider or database behaviour.
 
 ## Deferred decisions
 
-- A reproducible synthetic CLI-to-API demonstration and intentional production configuration.
+- Host acceptance of the synthetic CLI-to-API demonstration and intentional production configuration.
 - Raw-payload retention, automatic interruption detection and retry policy.
 - Public demo service eligibility and repository code licence.
 - CI/CD, scheduling, cloud hosting, and additional sources; disposable test containers already exist.
@@ -351,3 +351,33 @@ requiring weather retrieval, and success updates preserve lifecycle provenance.
 No general repository framework, new dependency, scheduler or concurrent worker
 is introduced. The synthetic-only CLI is `python -m hellas_dataops.ingestion`.
 See [status, resume and limits](ingestion.md) for the exact contract.
+
+## Synthetic end-to-end demonstration (3D.2)
+
+`scripts/demo.py` supplies a fixed demonstration workflow to the existing guarded
+PostgreSQL host runner. Its default integration-test workflow remains available.
+Both workflows share dependency preflight, checkpoint validation, fresh Compose
+provisioning, ownership checks and sanitized reports. No application or schema
+interface changes are needed. The demo invokes the real ingestion CLI, uses the
+accepted migration and progress inspection services, and checks unchanged replay.
+
+A hidden Python child constructs the real application factory and Uvicorn Server
+on an exclusively bound IPv4 loopback socket. Passing that held socket to Uvicorn
+avoids an allocate/release/rebind port race. The parent uses standard-library HTTP
+requests, bounded response bodies and sequential timing samples; it terminates
+only its own child handle in a finally block. Docker resources are retained.
+See [demo.md](demo.md). Offline orchestration tests do not prove real serving or
+performance; the owner's host report is required before acceptance.
+
+Windows startup remediation: the demo owns the real interpreter process rather
+than the virtual-environment redirector, using the same child-only launcher
+configuration as CPython multiprocessing. The child validates `.venv` identity;
+its PID must match the parent's process handle. Bounded sanitized diagnostics
+record startup phases, readiness and exceptions without raw messages or secrets.
+The accepted application factory, held socket and database contracts are unchanged.
+
+
+Milestone 3D.2 is accepted after the fresh host demonstration on 2026-10-23.
+See development.md and demo.md for verified counts, actual benchmark samples,
+cleanup evidence, limitations and the checkpoint-pinned host-runner restriction.
+This acceptance does not enable live weather ingestion or public deployment.
